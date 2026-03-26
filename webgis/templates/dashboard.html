@@ -1,0 +1,1262 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h2> Dashboard giám sát chất lượng nước TP.HCM</h2>
+<div class="top-bar"></div>
+
+<div class="wqi-bar"></div>
+<div class="export-buttons">
+    <button onclick="exportWarningsExcel()"> Xuất Excel</button>
+    <button onclick="exportWarningsHTML()"> Xuất báo cáo HTML</button>
+</div>
+<div id="timerBox" style="text-align:center; margin:10px;">
+     Cập nhật sau: <b id="countdown">60</b>s
+</div>
+
+<div class="grid">
+    <div class="card">
+        <h3> Thống kê trung bình</h3>
+        <div id="stats"></div>
+        <p id="updateTime" style="font-size:12px; color:#666;"></p>
+    </div>
+
+    <div class="warning-card">
+        <div class="warning-header">
+            <h3>⚠️ Cảnh báo ô nhiễm theo vùng (sông)</h3>
+            <div class="warning-actions">
+                <button id="toggleWarningBtn" class="toggle-warning-btn" style="display:none;">Xem thêm</button>
+                <button id="collapseAllBtn" class="toggle-warning-btn secondary-btn" style="display:none;">Ẩn bớt</button>
+            </div>
+        </div>
+
+        <div id="warningSummaryBox" class="warning-summary-box"></div>
+        <div id="warningList" class="warning-list-box"></div>
+    </div>
+
+    <div class="card">
+        <h3>🗺️ Bản đồ mini</h3>
+        <div id="miniMap"></div>
+    </div>
+</div>
+
+<div class="charts">
+    <div class="chart-card">
+        <div class="chart-title">pH</div>
+        <div class="chart-color-tag" style="background:#22d3ee;"></div>
+        <div class="chart-wrap"><canvas id="chartPH"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+        <div class="chart-title">DO</div>
+        <div class="chart-color-tag" style="background:#22e38e;"></div>
+        <div class="chart-wrap"><canvas id="chartDO"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+        <div class="chart-title">BOD5</div>
+        <div class="chart-color-tag" style="background:#f7b500;"></div>
+        <div class="chart-wrap"><canvas id="chartBOD"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+        <div class="chart-title">COD</div>
+        <div class="chart-color-tag" style="background:#ff4f8b;"></div>
+        <div class="chart-wrap"><canvas id="chartCOD"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+        <div class="chart-title">NH4</div>
+        <div class="chart-color-tag" style="background:#c8d92e;"></div>
+        <div class="chart-wrap"><canvas id="chartNH4"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+        <div class="chart-title">Coliform</div>
+        <div class="chart-color-tag" style="background:#ff5b57;"></div>
+        <div class="chart-wrap"><canvas id="chartColiform"></canvas></div>
+    </div>
+</div>
+
+<h3>Bảng dữ liệu quan trắc</h3>
+<table id="tableData">
+    <thead>
+        <tr><th>Điểm</th><th>pH</th><th>DO</th><th>BOD5</th><th>COD</th><th>NH4</th><th>Coliform</th></tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<div class="section-title">📌 Top các chỉ số nổi bật</div>
+
+<div class="top-grid">
+    <div class="top-card">
+        <h4>Top pH</h4>
+        <ul id="topPH"></ul>
+    </div>
+
+    <div class="top-card">
+        <h4>Top DO</h4>
+        <ul id="topDO"></ul>
+    </div>
+
+    <div class="top-card">
+        <h4>Top BOD5</h4>
+        <ul id="topBOD5"></ul>
+    </div>
+
+    <div class="top-card">
+        <h4>Top COD</h4>
+        <ul id="topCOD"></ul>
+    </div>
+
+    <div class="top-card">
+        <h4>Top NH4</h4>
+        <ul id="topNH4"></ul>
+    </div>
+
+    <div class="top-card">
+        <h4>Top Coliform</h4>
+        <ul id="topColiform"></ul>
+    </div>
+</div>
+
+<h3> Trung bình tổng hợp</h3>
+<div class="card" id="avgTable"></div>
+
+<style>
+
+    .warning-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .secondary-btn {
+        background: linear-gradient(135deg, #64748b, #475569);
+    }
+
+    .warning-summary-box {
+        margin-bottom: 16px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        background: linear-gradient(135deg, #fff7ed, #ffedd5);
+        border-left: 6px solid #f59e0b;
+        color: #9a3412;
+        font-size: 15px;
+        line-height: 1.8;
+        font-weight: 600;
+    }
+
+    .warning-list-box {
+        max-height: 430px;
+        overflow-y: auto;
+        padding-right: 8px;
+    }
+
+    .warning-block {
+        border-radius: 22px;
+        padding: 18px 20px;
+        margin-bottom: 18px;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+        border-left: 8px solid transparent;
+        transition: all 0.25s ease;
+    }
+
+    .warning-block:hover {
+        transform: translateY(-2px);
+    }
+
+    .warning-block h4 {
+        margin: 0 0 12px 0;
+        font-size: 20px;
+        font-weight: 800;
+    }
+
+    .warning-big-text {
+        font-size: 15px;
+        line-height: 1.95;
+        color: #1f2937;
+    }
+
+    .warning-meta {
+        margin-top: 14px;
+        font-size: 13px;
+        color: #475569;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .warning-cam {
+        background: linear-gradient(135deg, #fff7ed, #fed7aa);
+        border-left-color: #f97316;
+    }
+
+    .warning-vang {
+        background: linear-gradient(135deg, #fefce8, #fde68a);
+        border-left-color: #eab308;
+    }
+
+    .warning-do {
+        background: linear-gradient(135deg, #fef2f2, #fca5a5);
+        border-left-color: #dc2626;
+    }
+
+    .warning-xanh {
+        background: linear-gradient(135deg, #ecfeff, #a5f3fc);
+        border-left-color: #0891b2;
+    }
+
+    .warning-rat-cao {
+        background: linear-gradient(135deg, #fee2e2, #f87171);
+        border-left-color: #991b1b;
+    }
+
+    .warning-cao {
+        background: linear-gradient(135deg, #fff7ed, #fdba74);
+        border-left-color: #ea580c;
+    }
+
+    .warning-trung-binh {
+        background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+        border-left-color: #64748b;
+    }
+
+    .commentary-box {
+        background: white;
+        padding: 22px;
+        border-radius: 18px;
+        margin-top: 20px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+        border-left: 6px solid #f59e0b;
+    }
+
+    .export-buttons {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+
+    .export-buttons button {
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        color: white;
+        border: none;
+        padding: 12px 18px;
+        border-radius: 14px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
+        transition: all 0.25s ease;
+    }
+
+    .export-buttons button:hover {
+        transform: translateY(-2px);
+    }
+
+    .warning-reason {
+        margin-top: 10px;
+        padding: 10px 14px;
+        background: rgba(255, 243, 205, 0.65);
+        border-left: 4px solid #f59e0b;
+        border-radius: 12px;
+        font-size: 14px;
+        color: #7c2d12;
+    }
+
+    .warning-reason ul {
+        margin: 8px 0 0 18px;
+        padding: 0;
+    }
+
+    .warning-reason li {
+        margin-bottom: 6px;
+    }
+
+    .warning-commentary {
+        margin-top: 12px;
+        padding: 12px 15px;
+        border-radius: 14px;
+        font-size: 14px;
+        line-height: 1.7;
+        border-left: 5px solid #2563eb;
+        background: rgba(219, 234, 254, 0.55);
+        color: #1e3a8a;
+    }
+
+    .priority-rat-cao {
+        border-left-color: #dc2626;
+        background: rgba(254, 226, 226, 0.65);
+        color: #991b1b;
+    }
+
+    .priority-cao {
+        border-left-color: #f59e0b;
+        background: rgba(254, 243, 199, 0.65);
+        color: #92400e;
+    }
+
+    .priority-trung-binh {
+        border-left-color: #2563eb;
+        background: rgba(219, 234, 254, 0.55);
+        color: #1e3a8a;
+    }
+
+    .warning-card {
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(6px);
+        padding: 22px;
+        border-radius: 22px;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+        border: 1px solid rgba(255,255,255,0.6);
+        max-height: 520px;
+        overflow: hidden;
+    }
+
+    #warningList {
+        max-height: 400px;
+        overflow-y: auto;
+        padding-left: 22px;
+        margin: 0;
+        padding-right: 8px;
+    }
+
+    #warningList li {
+        margin-bottom: 12px;
+    }
+
+    .warning-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+        flex-wrap: wrap;
+    }
+
+    .toggle-warning-btn {
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 10px 16px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.22);
+        transition: all 0.25s ease;
+    }
+
+    .toggle-warning-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 22px rgba(37, 99, 235, 0.28);
+    }
+
+    .toggle-warning-btn:active {
+        transform: scale(0.98);
+    }
+
+    body {
+        margin: 0;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(180deg, #f4f8fc 0%, #eef3f8 100%);
+        color: #1f2937;
+    }
+
+    h2 {
+        text-align: center;
+        font-size: 42px;
+        font-weight: 800;
+        margin-top: 28px;
+        margin-bottom: 18px;
+        color: #1e3a5f;
+        text-shadow: none;
+    }
+
+    .top-bar {
+        width: 98%;
+        height: 18px;
+        margin: 0 auto 28px auto;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #22c55e, #84cc16, #eab308, #f97316, #ef4444, #a855f7, #be123c);
+        box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+    }
+
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+        margin: 24px;
+    }
+
+    .card {
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(6px);
+        padding: 22px;
+        border-radius: 22px;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+        border: 1px solid rgba(255,255,255,0.6);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 16px 34px rgba(15, 23, 42, 0.12);
+    }
+
+    .card h3 {
+        margin-top: 0;
+        margin-bottom: 18px;
+        font-size: 22px;
+        color: #1f3b63;
+        font-weight: 800;
+    }
+
+    #stats div {
+        font-size: 18px;
+        margin-bottom: 10px;
+        color: #334155;
+    }
+
+    #stats b {
+        color: #0f172a;
+    }
+
+    #updateTime {
+        font-size: 13px;
+        color: #64748b !important;
+        margin-top: 10px;
+    }
+
+    #miniMap {
+        height: 255px;
+        border-radius: 18px;
+        overflow: hidden;
+        border: 1px solid #dbe4ee;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.3);
+    }
+
+    .charts {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+        margin: 24px;
+    }
+
+    .chart-card {
+        background: rgba(255, 255, 255, 0.88);
+        backdrop-filter: blur(10px);
+        border-radius: 28px;
+        padding: 28px 24px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+        border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+
+    .chart-title {
+        text-align: center;
+        font-size: 24px;
+        font-weight: 800;
+        color: #1f3b63;
+        margin-bottom: 10px;
+    }
+
+    .chart-color-tag {
+        width: 52px;
+        height: 10px;
+        border-radius: 999px;
+        margin: 0 auto 16px auto;
+    }
+
+    .chart-wrap {
+        position: relative;
+        height: 300px;
+        width: 100%;
+    }
+
+    .chart-wrap canvas {
+        width: 100% !important;
+        height: 100% !important;
+        background: transparent;
+        padding: 0;
+        border-radius: 0;
+        box-shadow: none;
+        border: none;
+    }
+
+    h3 {
+        margin-left: 24px;
+        color: #1f3b63;
+        font-size: 24px;
+    }
+
+    table {
+        width: calc(100% - 48px);
+        margin: 20px 24px 40px 24px;
+        border-collapse: collapse;
+        background: rgba(255,255,255,0.95);
+        border-radius: 18px;
+        overflow: hidden;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    th {
+        background: linear-gradient(90deg, #1d4ed8, #2563eb);
+        color: white;
+        font-size: 15px;
+        padding: 12px;
+    }
+
+    td {
+        padding: 10px;
+        border: 1px solid #e5e7eb;
+        color: #334155;
+    }
+
+    tr:nth-child(even) {
+        background: #f8fbff;
+    }
+
+    tr:hover {
+        background: #eef6ff;
+    }
+
+    .warning-item { 
+        color: #dc2626; 
+        margin-bottom: 6px;
+        font-size: 17px;
+    }
+
+    .warning-link {
+        color: #1d4ed8;
+        text-decoration: underline;
+        cursor: pointer;
+        font-size: 17px;
+        font-weight: 700;
+    }
+
+    .warning-link:hover {
+        color: #dc2626;
+    }
+
+    #warning ul {
+        padding-left: 22px;
+    }
+
+    #warning li {
+        margin-bottom: 14px;
+    }
+
+    #btnExport {
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        color: white;
+        border: none;
+        padding: 12px 20px;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 8px 20px rgba(37, 99, 235, 0.25);
+        transition: all 0.2s ease;
+    }
+
+    #btnExport:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(37, 99, 235, 0.35);
+    }
+
+    #countdown {
+        text-align: center;
+        font-size: 18px;
+        color: #334155;
+        font-weight: 600;
+        margin-top: 14px;
+        margin-bottom: 8px;
+    }
+
+    hr {
+        border: none;
+        border-top: 1px solid #dbe4ee;
+        margin: 18px 0;
+    }
+
+    @media (max-width: 1200px) {
+        .grid, .charts {
+            grid-template-columns: 1fr;
+        }
+
+        h2 {
+            font-size: 32px;
+        }
+
+        .card {
+            padding: 18px;
+        }
+    }
+
+    .section-title {
+        font-size: 30px;
+        font-weight: 800;
+        color: #1f3b63;
+        margin: 30px 24px 18px 24px;
+    }
+
+    .top-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(280px, 1fr));
+        gap: 22px;
+        margin: 0 24px 28px 24px;
+        align-items: stretch;
+    }
+
+    .top-card {
+        background: rgba(255,255,255,0.95);
+        border-radius: 22px;
+        padding: 22px 24px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+        border: 1px solid #e7edf4;
+        min-height: 220px;
+        transition: all 0.2s ease;
+    }
+
+    .top-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 16px 30px rgba(15, 23, 42, 0.10);
+    }
+
+    .top-card h4 {
+        margin: 0 0 18px 0;
+        font-size: 28px;
+        font-weight: 800;
+        color: #1f2937;
+    }
+
+    .top-card ul {
+        margin: 0;
+        padding-left: 20px;
+    }
+
+    .top-card li {
+        font-size: 17px;
+        color: #334155;
+        margin-bottom: 10px;
+        line-height: 1.6;
+    }
+
+    .top-card b {
+        color: #0f172a;
+        font-size: 18px;
+    }
+
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<script>
+    let originalData = [], currentData = [];
+    let chartInstances = {};
+    let miniMap, miniLayer;
+    let refreshInterval;
+    let riverData = null;
+    let warningExpanded = false;
+    let warnings = [];  
+    let warningSegments = [];
+
+    const spatialPollutionSources = [
+        { name: "Khu công nghiệp phía Bắc", type: "industrial", lat: 11.0205, lng: 106.6150, radius: 0.015, description: "khu công nghiệp / cụm công nghiệp" },
+        { name: "Cụm dân cư ven sông trung tâm", type: "residential", lat: 10.9950, lng: 106.6400, radius: 0.018, description: "khu dân cư ven sông" },
+        { name: "Khu sản xuất - kho bãi", type: "industrial", lat: 10.9780, lng: 106.6530, radius: 0.015, description: "cơ sở sản xuất / kho bãi" },
+        { name: "Vùng nông nghiệp / chăn nuôi", type: "agriculture", lat: 10.9400, lng: 106.6500, radius: 0.02, description: "khu nông nghiệp / chăn nuôi" },
+        { name: "Khu dân cư hạ lưu", type: "residential", lat: 10.9250, lng: 106.6600, radius: 0.018, description: "khu dân cư" }
+    ];
+
+    const thresholds = {
+        ph: { min: 6, max: 8.5, name: "pH" },
+        do: { min: 4, name: "DO" },
+        bod5: { max: 12, name: "BOD5" },
+        cod: { max: 30, name: "COD" },
+        nh4: { max: 0.5, name: "NH4" },
+        coliform: { max: 5000, name: "Coliform" }
+    };
+
+    function randomInRange(min, max, decimals = 2) {
+        return Number((Math.random() * (max - min) + min).toFixed(decimals));
+    }
+
+    function varyValue(base, minChange, maxChange, minLimit = null, maxLimit = null, decimals = 2) {
+        let delta = Math.random() * (maxChange - minChange) + minChange;
+        let newVal = Number(base) + delta;
+        if (minLimit !== null) newVal = Math.max(minLimit, newVal);
+        if (maxLimit !== null) newVal = Math.min(maxLimit, newVal);
+        return Number(newVal.toFixed(decimals));
+    }
+
+    function simulateRealtimeData(data) {
+        if (!data || data.length === 0) return data;
+        return data.map((item, index) => {
+            let newPH = varyValue(item.ph ?? 7.0, -0.15, 0.15, 6.0, 8.5, 2);
+            let newDO = varyValue(item.do ?? 6.0, -0.8, 0.5, 2.5, 8.5, 2);
+            let newBOD5 = varyValue(item.bod5 ?? 5.0, -1.5, 2.0, 1.0, 20.0, 2);
+            let newCOD = varyValue(item.cod ?? 12.0, -3.5, 5.0, 5.0, 45.0, 2);
+            let newNH4 = varyValue(item.nh4 ?? 0.2, -0.08, 0.15, 0.01, 1.5, 2);
+            let newColiform = Math.round(varyValue(item.coliform ?? 800, -800, 1200, 100, 15000, 0));
+            return { ...item, ph: newPH, do: newDO, bod5: newBOD5, cod: newCOD, nh4: newNH4, coliform: newColiform };
+        });
+    }
+
+    function getPriorityColorClass(priority) {
+        if (!priority) return "warning-trung-binh";
+        const p = priority.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        if (p.includes("rat cao")) return "warning-rat-cao";
+        if (p.includes("cao")) return "warning-cao";
+        return "warning-trung-binh";
+    }
+
+    function buildBigWarningParagraph(seg) {
+        const issuesText = (seg.issues && seg.issues.length) ? `Các chỉ tiêu nổi bật gồm: ${seg.issues.join("; ")}. ` : "";
+        const pollutionText = (seg.pollutionType && seg.pollutionType.length) ? `Loại ô nhiễm nghi ngờ chủ yếu là ${seg.pollutionType.join(", ")}. ` : "";
+        const reasonsText = (seg.reasons && seg.reasons.length) ? `Nguyên nhân có thể liên quan đến ${seg.reasons.join("; ")}. ` : "";
+        const spatialText = (seg.spatialSources && seg.spatialSources.length) ? `Ngữ cảnh không gian gần: ${seg.spatialSources.join("; ")}. ` : "";
+        const sourceText = (seg.suspectedSources && seg.suspectedSources.length) ? `Nguồn tác động nghi ngờ: ${seg.suspectedSources.join("; ")}. ` : "";
+        const recommendationText = (seg.recommendations && seg.recommendations.length) ? `Khuyến nghị: ${seg.recommendations.join("; ")}. ` : "";
+        const commentaryText = seg.commentary ? `${seg.commentary} ` : "";
+        return `${issuesText}${pollutionText}${reasonsText}${spatialText}${sourceText}${commentaryText}${recommendationText}`.trim();
+    }
+
+    // Hàm mở trang map.html với tọa độ đoạn sông
+    function zoomToSegment(segment) {
+        if (!segment || !segment.startLat || !segment.startLng || !segment.endLat || !segment.endLng) {
+            console.warn("Không có đủ tọa độ để zoom");
+            return;
+        }
+        var lat1 = segment.startLat;
+        var lng1 = segment.startLng;
+        var lat2 = segment.endLat;
+        var lng2 = segment.endLng;
+        var minLat = Math.min(lat1, lat2);
+        var maxLat = Math.max(lat1, lat2);
+        var minLng = Math.min(lng1, lng2);
+        var maxLng = Math.max(lng1, lng2);
+        var bounds = `${minLat},${minLng},${maxLat},${maxLng}`;
+        var centerLat = (lat1 + lat2) / 2;
+        var centerLng = (lng1 + lng2) / 2;
+        
+        // Tạo chuỗi coords từ segment.coords (mảng các cặp [lat, lng])
+        var coordsStr = "";
+        if (segment.coords && segment.coords.length > 0) {
+            coordsStr = segment.coords.map(p => `${p[0]},${p[1]}`).join(";");
+        } else {
+            coordsStr = `${lat1},${lng1};${lat2},${lng2}`;
+        }
+        
+        window.open(`/map/?center=${centerLat},${centerLng}&bounds=${bounds}&coords=${coordsStr}`, '_blank');
+    }
+
+    function renderWarningCards(data) {
+        const warningList = document.getElementById("warningList");
+        const toggleBtn = document.getElementById("toggleWarningBtn");
+        const collapseBtn = document.getElementById("collapseAllBtn");
+        const summaryBox = document.getElementById("warningSummaryBox");
+        if (!warningList) return;
+
+        if (!data || data.length === 0) {
+            warningList.innerHTML = `<div class="warning-block warning-xanh"><h4>✅ Không có cảnh báo đáng kể</h4><div class="warning-big-text">Hiện tại hệ thống chưa ghi nhận đoạn sông nào có mức cảnh báo ô nhiễm nổi bật.</div></div>`;
+            if (toggleBtn) toggleBtn.style.display = "none";
+            if (collapseBtn) collapseBtn.style.display = "none";
+            if (summaryBox) summaryBox.innerHTML = `Hệ thống đang ở trạng thái ổn định, chưa ghi nhận cụm cảnh báo đáng chú ý.`;
+            return;
+        }
+
+        const total = data.length;
+        const veryHigh = data.filter(x => x.priority === "Rất cao").length;
+        const high = data.filter(x => x.priority === "Cao").length;
+        const medium = data.filter(x => x.priority === "Trung bình").length;
+
+        if (summaryBox) {
+            summaryBox.innerHTML = `Hệ thống đang ghi nhận <b>${total}</b> vùng cảnh báo. Trong đó có <b>${veryHigh}</b> vùng mức <b>Rất cao</b>, <b>${high}</b> vùng mức <b>Cao</b> và <b>${medium}</b> vùng mức <b>Trung bình</b>. Dữ liệu đã được gom theo đoạn lớn để giúp theo dõi nhanh hơn và giảm tải hiển thị.`;
+        }
+
+        const visibleData = warningExpanded ? data : data.slice(0, 4);
+        warningList.innerHTML = visibleData.map(seg => {
+            const p = (seg.priority || "Trung bình").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const dangerIcon = p.includes("rat cao") ? "🚨" : (p.includes("cao") ? "⚠️" : "📍");
+            // Escape để truyền object vào onclick
+            const segJson = JSON.stringify(seg).replace(/"/g, '&quot;');
+            return `
+                <div class="warning-block ${getPriorityColorClass(seg.priority)}" onclick="zoomToSegment(${segJson})" style="cursor:pointer;">
+                    <h4>${dangerIcon} ${seg.location}</h4>
+                    <div class="warning-big-text">${buildBigWarningParagraph(seg)}</div>
+                    <div class="warning-meta">
+                        <span><b>Mức ưu tiên:</b> ${seg.priority || "Trung bình"}</span>
+                        ${seg.report_date ? `<span>🕒 ${new Date(seg.report_date).toLocaleString()}</span>` : ""}
+                    </div>
+                </div>
+            `;
+        }).join("");
+
+        if (toggleBtn && collapseBtn) {
+            if (data.length > 4) {
+                toggleBtn.style.display = warningExpanded ? "none" : "inline-block";
+                collapseBtn.style.display = warningExpanded ? "inline-block" : "none";
+            } else {
+                toggleBtn.style.display = "none";
+                collapseBtn.style.display = "none";
+            }
+        }
+    }
+
+    function mergeWarningsForDashboard(data) {
+        if (!data || data.length === 0) return [];
+        return data.map((seg, index) => {
+            const startText = (seg.startLat != null && seg.startLng != null) ? `(${Number(seg.startLat).toFixed(4)}, ${Number(seg.startLng).toFixed(4)})` : "";
+            const endText = (seg.endLat != null && seg.endLng != null) ? `(${Number(seg.endLat).toFixed(4)}, ${Number(seg.endLng).toFixed(4)})` : "";
+            const locationText = (startText && endText) ? `Đoạn sông ${startText} → ${endText}` : (seg.location || `Đoạn cảnh báo ${index + 1}`);
+            return { ...seg, location: locationText, issues: [...new Set(seg.issues || [])].slice(0, 10) };
+        });
+    }
+
+    function isFeatureInHCM(feature) {
+        var hcmBounds = { minLng: 106.3, maxLng: 107.0, minLat: 10.3, maxLat: 11.3 };
+        var coords = [];
+        if (feature.geometry.type === 'LineString') coords = feature.geometry.coordinates;
+        else if (feature.geometry.type === 'MultiLineString') feature.geometry.coordinates.forEach(line => line.forEach(c => coords.push(c)));
+        else return false;
+        if (coords.length === 0) return false;
+        var minLng = Math.min(...coords.map(c => c[0]));
+        var maxLng = Math.max(...coords.map(c => c[0]));
+        var minLat = Math.min(...coords.map(c => c[1]));
+        var maxLat = Math.max(...coords.map(c => c[1]));
+        return (maxLng >= hcmBounds.minLng && minLng <= hcmBounds.maxLng && maxLat >= hcmBounds.minLat && minLat <= hcmBounds.maxLat);
+    }
+
+    function idwValue(points, lat, lng, power = 3, maxPoints = 3) {
+        if (!points || points.length === 0) return null;
+        let sorted = points.map(p => ({ ...p, d: Math.sqrt((p.lat - lat)**2 + (p.lng - lng)**2) })).sort((a,b) => a.d - b.d).slice(0, maxPoints);
+        let numerator = 0, denominator = 0;
+        for (let p of sorted) {
+            if (p.d === 0) return p.val;
+            let w = 1 / Math.pow(p.d, power);
+            numerator += w * p.val;
+            denominator += w;
+        }
+        return numerator / denominator;
+    }
+
+    function interpolateOnRiverSegments(pointsData) {
+        if (!riverData) return [];
+        let pointsPH = pointsData.filter(p => p.geometry && p.ph != null).map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.ph }));
+        let pointsDO = pointsData.filter(p => p.geometry && p.do != null).map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.do }));
+        let pointsBOD = pointsData.filter(p => p.geometry && p.bod5 != null).map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.bod5 }));
+        let pointsCOD = pointsData.filter(p => p.geometry && p.cod != null).map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.cod }));
+        let pointsNH4 = pointsData.filter(p => p.geometry && p.nh4 != null).map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.nh4 }));
+        let pointsColi = pointsData.filter(p => p.geometry && p.coliform != null).map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.coliform }));
+
+        let segments = [];
+        riverData.features.forEach(feature => {
+            if (!isFeatureInHCM(feature)) return;
+            let coords = [];
+            if (feature.geometry.type === "LineString") coords = feature.geometry.coordinates;
+            else if (feature.geometry.type === "MultiLineString") coords = feature.geometry.coordinates.flat();
+            coords = coords.filter((c, i, arr) => i===0 || !(c[0]===arr[i-1][0] && c[1]===arr[i-1][1]));
+            for (let i = 0; i < coords.length - 1; i++) {
+                let p1 = coords[i], p2 = coords[i+1];
+                let cx = (p1[1] + p2[1])/2;
+                let cy = (p1[0] + p2[0])/2;
+                let segment = { lat: cx, lng: cy, coords: [[p1[1], p1[0]], [p2[1], p2[0]]], values: {} };
+                segment.values.ph = idwValue(pointsPH, cx, cy);
+                segment.values.do = idwValue(pointsDO, cx, cy);
+                segment.values.bod5 = idwValue(pointsBOD, cx, cy);
+                segment.values.cod = idwValue(pointsCOD, cx, cy);
+                segment.values.nh4 = idwValue(pointsNH4, cx, cy);
+                segment.values.coliform = idwValue(pointsColi, cx, cy);
+                segments.push(segment);
+            }
+        });
+        return segments;
+    }
+
+    function getPollutionReasons(issueKeys) {
+        let reasons = [];
+        if (issueKeys.includes("BOD5")) reasons.push("Nước thải sinh hoạt, chất hữu cơ phân hủy, rác thải hữu cơ");
+        if (issueKeys.includes("COD")) reasons.push("Nước thải công nghiệp, hóa chất, chất hữu cơ khó phân hủy");
+        if (issueKeys.includes("NH4")) reasons.push("Nước thải sinh hoạt, chăn nuôi, phân bón nông nghiệp");
+        if (issueKeys.includes("DO")) reasons.push("Nước tù đọng, thiếu oxy hòa tan do ô nhiễm hữu cơ");
+        if (issueKeys.includes("Coliform")) reasons.push("Ô nhiễm vi sinh từ phân, nước thải sinh hoạt, xả thải chưa xử lý");
+        if (issueKeys.includes("pH")) reasons.push("Nước thải chứa axit/kiềm, hóa chất công nghiệp hoặc biến động môi trường");
+        return [...new Set(reasons)];
+    }
+
+    function generateSegmentCommentary(issueMap, reasons = [], spatialSources = []) {
+        const keys = Object.keys(issueMap || {});
+        let comments = [], recommendations = [], suspectedSources = [], priority = "Trung bình", pollutionType = [];
+        const hasBOD = keys.includes("BOD5"), hasCOD = keys.includes("COD"), hasDO = keys.includes("DO"), hasNH4 = keys.includes("NH4"), hasColiform = keys.includes("Coliform"), hasPH = keys.includes("pH");
+        const nearIndustrial = spatialSources.some(s => s.type === "industrial");
+        const nearResidential = spatialSources.some(s => s.type === "residential");
+        const nearAgriculture = spatialSources.some(s => s.type === "agriculture");
+
+        if (hasBOD && hasDO) { pollutionType.push("ô nhiễm hữu cơ"); comments.push("Đoạn sông này có dấu hiệu ô nhiễm hữu cơ rõ rệt, thể hiện qua BOD5 tăng và DO suy giảm."); suspectedSources.push("nước thải sinh hoạt", "chất hữu cơ phân hủy"); recommendations.push("kiểm tra nguồn xả sinh hoạt và khả năng tù đọng dòng chảy"); priority = "Cao"; }
+        if (hasCOD && hasPH) { pollutionType.push("ô nhiễm hóa học / công nghiệp"); comments.push("COD cao kèm pH bất thường cho thấy có khả năng tồn tại tác động từ nguồn thải công nghiệp hoặc hóa chất."); suspectedSources.push("nguồn thải hóa chất", "nước thải công nghiệp"); recommendations.push("rà soát các nguồn xả thải công nghiệp hoặc cơ sở sản xuất gần khu vực"); priority = "Cao"; }
+        else if (hasCOD) { pollutionType.push("ô nhiễm hóa học"); comments.push("Hàm lượng COD tăng phản ánh khả năng xuất hiện chất ô nhiễm hữu cơ khó phân hủy hoặc hóa chất trong nước."); suspectedSources.push("nguồn xả chứa hóa chất", "chất hữu cơ khó phân hủy"); recommendations.push("kiểm tra các nguồn thải có khả năng chứa COD cao"); }
+        if (hasNH4 && hasColiform) { pollutionType.push("ô nhiễm sinh hoạt / vi sinh"); comments.push("NH4 và Coliform cùng tăng cho thấy đoạn sông có khả năng chịu tác động từ nước thải sinh hoạt, chăn nuôi hoặc nguồn ô nhiễm vi sinh."); suspectedSources.push("nước thải sinh hoạt", "ô nhiễm vi sinh"); recommendations.push("kiểm tra nguồn xả dân sinh, khu dân cư và nguy cơ ô nhiễm vi sinh"); priority = "Cao"; }
+        else if (hasNH4) { pollutionType.push("ô nhiễm dinh dưỡng / amoni"); comments.push("NH4 tăng cho thấy nước có thể chịu tác động từ nước thải sinh hoạt, chăn nuôi hoặc phân bón."); suspectedSources.push("nguồn thải chứa amoni", "phân bón", "chăn nuôi"); recommendations.push("kiểm tra nguồn thải chứa NH4 và khu vực dân cư / chăn nuôi"); }
+        else if (hasColiform) { pollutionType.push("ô nhiễm vi sinh"); comments.push("Coliform tăng phản ánh nguy cơ ô nhiễm vi sinh, thường liên quan đến phân hoặc nước thải sinh hoạt chưa xử lý."); suspectedSources.push("ô nhiễm phân", "nước thải sinh hoạt"); recommendations.push("ưu tiên kiểm tra nguy cơ ô nhiễm vi sinh tại khu vực này"); }
+        if (hasPH && !hasCOD) { pollutionType.push("mất cân bằng hóa học"); comments.push("Giá trị pH bất thường cho thấy có thể tồn tại tác động từ nguồn nước thải có tính axit hoặc kiềm."); suspectedSources.push("nguồn thải có tính axit / kiềm"); recommendations.push("kiểm tra tính chất hóa học của nguồn nước và điểm xả gần đó"); }
+        if (nearIndustrial) { comments.push("Về mặt không gian, đoạn sông này nằm gần khu vực có hoạt động công nghiệp / sản xuất, nên cần lưu ý khả năng chịu tác động từ nguồn thải sản xuất."); suspectedSources.push("khu công nghiệp / cơ sở sản xuất"); recommendations.push("ưu tiên rà soát cơ sở sản xuất hoặc điểm xả công nghiệp lân cận"); }
+        if (nearResidential) { comments.push("Khu vực cảnh báo nằm gần khu dân cư, nên có khả năng chịu ảnh hưởng từ nước thải sinh hoạt hoặc xả thải dân sinh."); suspectedSources.push("khu dân cư", "nước thải sinh hoạt"); recommendations.push("kiểm tra các điểm thoát nước dân cư ven sông"); }
+        if (nearAgriculture) { comments.push("Khu vực này cũng tiếp cận vùng nông nghiệp / chăn nuôi, cần lưu ý khả năng ảnh hưởng từ dòng chảy mặt, phân bón hoặc chất thải chăn nuôi."); suspectedSources.push("nông nghiệp", "chăn nuôi", "dòng chảy mặt"); recommendations.push("kiểm tra khu vực chăn nuôi hoặc dòng chảy mặt sau mưa"); }
+
+        const severeCount = [hasBOD, hasCOD, hasDO, hasNH4, hasColiform, hasPH].filter(Boolean).length;
+        if (severeCount >= 4) { comments.push("Đây là đoạn sông có dấu hiệu ô nhiễm hỗn hợp với nhiều chỉ tiêu vượt ngưỡng đồng thời, cần ưu tiên kiểm tra hiện trường."); recommendations.push("ưu tiên khảo sát thực địa và truy vết nguồn xả ngay"); priority = "Rất cao"; }
+        if (nearIndustrial && (hasCOD || hasPH)) priority = "Rất cao";
+        if (nearResidential && (hasNH4 || hasColiform || hasBOD) && priority !== "Rất cao") priority = "Cao";
+        if (comments.length === 0) { comments.push("Đoạn sông này có dấu hiệu chất lượng nước suy giảm và cần tiếp tục theo dõi thêm."); recommendations.push("duy trì quan trắc định kỳ để đánh giá xu hướng"); }
+
+        pollutionType = [...new Set(pollutionType)];
+        suspectedSources = [...new Set([...suspectedSources, ...reasons])];
+        recommendations = [...new Set(recommendations)];
+        let summary = pollutionType.length ? `Loại ô nhiễm nghi ngờ: ${pollutionType.join(", ")}. ` : "";
+        summary += comments.join(" ");
+        if (suspectedSources.length) summary += ` Nguồn tác động nghi ngờ: ${suspectedSources.slice(0, 5).join(", ")}.`;
+        if (recommendations.length) summary += ` Khuyến nghị: ${recommendations.slice(0, 3).join("; ")}.`;
+        return { text: summary, priority, pollutionType, suspectedSources, recommendations };
+    }
+
+    function distance2D(lat1, lng1, lat2, lng2) { return Math.sqrt(Math.pow(lat1 - lat2, 2) + Math.pow(lng1 - lng2, 2)); }
+
+    function getNearbySpatialSources(coords = []) {
+        if (!coords || coords.length === 0) return [];
+        let found = [];
+        coords.forEach(c => { spatialPollutionSources.forEach(src => { if (distance2D(c.lat, c.lng, src.lat, src.lng) <= src.radius) found.push(src); }); });
+        return found.filter((v, i, arr) => arr.findIndex(x => x.name === v.name) === i);
+    }
+
+    function inferLandUseByCoordinates(coords) {
+        if (!coords || coords.length === 0) return [];
+        let avgLat = coords.reduce((s, c) => s + c.lat, 0) / coords.length;
+        let avgLng = coords.reduce((s, c) => s + c.lng, 0) / coords.length;
+        if (avgLat > 10.99) return [{ type: "industrial", name: "Khu vực công nghiệp phía Bắc", description: "gần khu công nghiệp, cơ sở sản xuất" }];
+        if (avgLat < 10.94) return [{ type: "agriculture", name: "Vùng nông nghiệp / chăn nuôi", description: "khu vực nông nghiệp, chăn nuôi" }];
+        return [{ type: "residential", name: "Khu dân cư ven sông", description: "khu dân cư, nước thải sinh hoạt" }];
+    }
+
+    function describeSpatialSources(sources = []) {
+        if (!sources || sources.length === 0) return [];
+        let desc = [];
+        sources.forEach(src => {
+            if (src.type === "industrial") desc.push("khu vực lân cận có tiếp cận với khu công nghiệp / cơ sở sản xuất");
+            if (src.type === "residential") desc.push("đoạn sông nằm gần khu dân cư, có khả năng chịu tác động từ nước thải sinh hoạt");
+            if (src.type === "agriculture") desc.push("khu vực gần vùng nông nghiệp / chăn nuôi, có khả năng chịu tác động từ dòng chảy mặt hoặc nước thải chăn nuôi");
+        });
+        return [...new Set(desc)];
+    }
+
+    function mergeAdjacentGroups(groups) {
+        if (groups.length < 2) return groups;
+        let merged = [];
+        let current = { ...groups[0] };
+        for (let i = 1; i < groups.length; i++) {
+            const next = groups[i];
+            const avgLatCurr = (current.startSeg.lat + current.endSeg.lat) / 2;
+            const avgLngCurr = (current.startSeg.lng + current.endSeg.lng) / 2;
+            const avgLatNext = (next.startSeg.lat + next.endSeg.lat) / 2;
+            const avgLngNext = (next.startSeg.lng + next.endSeg.lng) / 2;
+            const dist = Math.sqrt((avgLatCurr - avgLatNext)**2 + (avgLngCurr - avgLngNext)**2);
+            if (dist < 0.01 && current.priority === next.priority) {
+                current.endSeg = next.endSeg;
+                current.allCoords.push(...next.allCoords);
+                Object.keys(next.issueMap).forEach(k => {
+                    if (!current.issueMap[k]) current.issueMap[k] = [];
+                    current.issueMap[k].push(...next.issueMap[k]);
+                });
+            } else {
+                merged.push(current);
+                current = { ...next };
+            }
+        }
+        merged.push(current);
+        return merged;
+    }
+
+    function generateZoneWarnings(segments) {
+        warnings = [];
+        warningSegments = [];
+        let currentGroup = null;
+
+        function getIssues(seg) {
+            let issues = [];
+            if (seg.values.ph !== null && (seg.values.ph < thresholds.ph.min || seg.values.ph > thresholds.ph.max)) issues.push({ key: "pH", value: seg.values.ph });
+            if (seg.values.do !== null && seg.values.do < thresholds.do.min) issues.push({ key: "DO", value: seg.values.do });
+            if (seg.values.bod5 !== null && seg.values.bod5 > thresholds.bod5.max) issues.push({ key: "BOD5", value: seg.values.bod5 });
+            if (seg.values.cod !== null && seg.values.cod > thresholds.cod.max) issues.push({ key: "COD", value: seg.values.cod });
+            if (seg.values.nh4 !== null && seg.values.nh4 > thresholds.nh4.max) issues.push({ key: "NH4", value: seg.values.nh4 });
+            if (seg.values.coliform !== null && seg.values.coliform > thresholds.coliform.max) issues.push({ key: "Coliform", value: seg.values.coliform });
+            return issues;
+        }
+
+        for (let idx = 0; idx < segments.length; idx++) {
+            let seg = segments[idx];
+            let issues = getIssues(seg);
+            if (issues.length > 0) {
+                if (!currentGroup) {
+                    currentGroup = { startSeg: seg, endSeg: seg, allCoords: [...seg.coords], issueMap: {} };
+                } else {
+                    currentGroup.endSeg = seg;
+                    currentGroup.allCoords.push(...seg.coords);
+                }
+                issues.forEach(issue => {
+                    if (!currentGroup.issueMap[issue.key]) currentGroup.issueMap[issue.key] = [];
+                    currentGroup.issueMap[issue.key].push(issue.value);
+                });
+            } else {
+                if (currentGroup) { warnings.push(currentGroup); currentGroup = null; }
+            }
+        }
+        if (currentGroup) warnings.push(currentGroup);
+        warnings = mergeAdjacentGroups(warnings);
+
+        warnings.forEach(group => {
+            let startLat = group.startSeg.coords[0][0], startLng = group.startSeg.coords[0][1];
+            let endLat = group.endSeg.coords[1][0], endLng = group.endSeg.coords[1][1];
+            let issueTexts = [];
+            Object.keys(group.issueMap).forEach(key => {
+                let vals = group.issueMap[key];
+                let minVal = Math.min(...vals), maxVal = Math.max(...vals);
+                if (key === "pH") issueTexts.push(`pH (${minVal.toFixed(2)} - ${maxVal.toFixed(2)}) vượt ngưỡng ${thresholds.ph.min}-${thresholds.ph.max}`);
+                else if (key === "DO") issueTexts.push(`DO (${minVal.toFixed(2)} - ${maxVal.toFixed(2)}) < ${thresholds.do.min}`);
+                else if (key === "BOD5") issueTexts.push(`BOD5 (${minVal.toFixed(2)} - ${maxVal.toFixed(2)}) > ${thresholds.bod5.max}`);
+                else if (key === "COD") issueTexts.push(`COD (${minVal.toFixed(2)} - ${maxVal.toFixed(2)}) > ${thresholds.cod.max}`);
+                else if (key === "NH4") issueTexts.push(`NH4 (${minVal.toFixed(2)} - ${maxVal.toFixed(2)}) > ${thresholds.nh4.max}`);
+                else if (key === "Coliform") issueTexts.push(`Coliform (${Math.round(minVal)} - ${Math.round(maxVal)}) > ${thresholds.coliform.max}`);
+            });
+            const issueKeys = Object.keys(group.issueMap);
+            const pollutionReasons = getPollutionReasons(issueKeys);
+            let nearbySpatial = getNearbySpatialSources(group.allCoords);
+            if (nearbySpatial.length === 0) {
+                nearbySpatial = inferLandUseByCoordinates(group.allCoords);
+            }
+            const spatialDescriptions = describeSpatialSources(nearbySpatial);
+            const combinedReasons = [...new Set([...pollutionReasons, ...spatialDescriptions])];
+            const segmentCommentary = generateSegmentCommentary(group.issueMap, combinedReasons, nearbySpatial);
+            warningSegments.push({
+                location: `Đoạn sông (${startLat.toFixed(4)}, ${startLng.toFixed(4)}) → (${endLat.toFixed(4)}, ${endLng.toFixed(4)})`,
+                issues: issueTexts,
+                reasons: combinedReasons,
+                commentary: segmentCommentary.text,
+                priority: segmentCommentary.priority,
+                pollutionType: segmentCommentary.pollutionType,
+                suspectedSources: segmentCommentary.suspectedSources,
+                recommendations: segmentCommentary.recommendations,
+                spatialSources: nearbySpatial.map(s => s.name),
+                coords: group.allCoords,
+                startLat, startLng, endLat, endLng
+            });
+        });
+        warningSegments = mergeWarningsForDashboard(warningSegments);
+        renderWarningCards(warningSegments);
+    }
+
+    function generateAutoCommentary() {
+        if (!warningSegments || warningSegments.length === 0) {
+            return `<p>Hiện tại hệ thống chưa ghi nhận đoạn sông nào có dấu hiệu ô nhiễm vượt ngưỡng đáng kể. Chất lượng nước nhìn chung đang ở trạng thái ổn định.</p>`;
+        }
+        let issueCount = {}, reasonCount = {}, pollutionTypeCount = {}, priorityCount = { "Rất cao": 0, "Cao": 0, "Trung bình": 0 };
+        warningSegments.forEach(seg => {
+            (seg.issues || []).forEach(issue => {
+                if (issue.includes("pH")) issueCount["pH"] = (issueCount["pH"] || 0) + 1;
+                if (issue.includes("DO")) issueCount["DO"] = (issueCount["DO"] || 0) + 1;
+                if (issue.includes("BOD5")) issueCount["BOD5"] = (issueCount["BOD5"] || 0) + 1;
+                if (issue.includes("COD")) issueCount["COD"] = (issueCount["COD"] || 0) + 1;
+                if (issue.includes("NH4")) issueCount["NH4"] = (issueCount["NH4"] || 0) + 1;
+                if (issue.includes("Coliform")) issueCount["Coliform"] = (issueCount["Coliform"] || 0) + 1;
+            });
+            (seg.reasons || []).forEach(reason => { reasonCount[reason] = (reasonCount[reason] || 0) + 1; });
+            (seg.pollutionType || []).forEach(type => { pollutionTypeCount[type] = (pollutionTypeCount[type] || 0) + 1; });
+            if (seg.priority && priorityCount[seg.priority] !== undefined) priorityCount[seg.priority]++;
+        });
+        const topIssues = Object.entries(issueCount).sort((a,b) => b[1] - a[1]).slice(0,4).map(x => x[0]);
+        const topReasons = Object.entries(reasonCount).sort((a,b) => b[1] - a[1]).slice(0,3).map(x => x[0]);
+        const topPollutionTypes = Object.entries(pollutionTypeCount).sort((a,b) => b[1] - a[1]).slice(0,3).map(x => x[0]);
+        let overallLevel = "Trung bình";
+        if (priorityCount["Rất cao"] >= 2 || warningSegments.length >= 6) overallLevel = "Nghiêm trọng";
+        else if (priorityCount["Rất cao"] >= 1 || priorityCount["Cao"] >= 3) overallLevel = "Đáng lo ngại";
+        let analysisText = "";
+        if (topIssues.includes("BOD5") || topIssues.includes("DO")) analysisText += `Hệ thống đang xuất hiện dấu hiệu <b>ô nhiễm hữu cơ</b>, thể hiện qua BOD5 tăng và/hoặc DO suy giảm ở nhiều đoạn sông. `;
+        if (topIssues.includes("COD") || topIssues.includes("pH")) analysisText += `Một số khu vực có biểu hiện chịu tác động từ <b>nguồn thải công nghiệp hoặc hóa chất</b>, thể hiện qua COD cao hoặc pH bất thường. `;
+        if (topIssues.includes("NH4")) analysisText += `Dấu hiệu <b>ô nhiễm sinh hoạt / dinh dưỡng</b> cũng được ghi nhận, thể hiện qua NH4 tăng tại một số vị trí. `;
+        if (topIssues.includes("Coliform")) analysisText += `Một số đoạn có nguy cơ <b>ô nhiễm vi sinh</b>, thể hiện qua Coliform vượt ngưỡng. `;
+        if (!analysisText.trim()) analysisText = `Các chỉ tiêu môi trường đang có dấu hiệu biến động cục bộ, cần tiếp tục theo dõi để xác định rõ xu hướng ô nhiễm. `;
+        return `<div style="line-height:1.95; font-size:15px;"><p><b>Tổng quan hệ thống:</b> Tại thời điểm xuất báo cáo, hệ thống ghi nhận <b>${warningSegments.length} vùng cảnh báo</b> trên sông. Mức độ chung được đánh giá là <b>${overallLevel}</b>, trong đó có <b>${priorityCount["Rất cao"] || 0}</b> vùng mức <b>Rất cao</b>, <b>${priorityCount["Cao"] || 0}</b> vùng mức <b>Cao</b>, và <b>${priorityCount["Trung bình"] || 0}</b> vùng mức <b>Trung bình</b>.</p><p><b>Chỉ tiêu nổi bật:</b> Các thông số xuất hiện vượt ngưỡng nhiều nhất gồm <b>${topIssues.length ? topIssues.join(", ") : "chưa xác định rõ"}</b>. Đây là những chỉ số đang phản ánh rõ nhất sự suy giảm chất lượng nước trên toàn tuyến theo dõi.</p><p><b>Loại ô nhiễm nổi bật:</b> <b>${topPollutionTypes.length ? topPollutionTypes.join(", ") : "chưa xác định rõ"}</b>.</p><p><b>Phân tích tự động:</b> ${analysisText}</p><p><b>Nguyên nhân tác động có thể:</b> ${topReasons.length ? topReasons.join("; ") : "Chưa xác định rõ nguồn tác động nổi bật"}.</p><p><b>Khuyến nghị ưu tiên:</b> Tiếp tục giám sát định kỳ và rà soát hiện trường các khu vực có mức cảnh báo cao.</p></div>`;
+    }
+
+    function exportWarningsExcel() {
+        if (warningSegments.length === 0) { alert("Không có cảnh báo ô nhiễm vùng để xuất!"); return; }
+        let htmlContent = `<html><head><meta charset="UTF-8"><title>Báo cáo cảnh báo ô nhiễm vùng</title><style>
+            body{font-family:'Times New Roman',serif;margin:20px;}
+            h1{text-align:center;}
+            table{border-collapse:collapse;width:100%;margin-top:20px;}
+            th,td{border:1px solid #000;padding:8px;text-align:left;vertical-align:top;}
+            th{background:#dbeafe;}
+            .priority-rat-cao { background-color: #ff4d4d; color: white; font-weight: bold; }
+            .priority-cao { background-color: #ffa64d; color: white; font-weight: bold; }
+            .priority-trung-binh { background-color: #f2f2f2; color: black; }
+        </style></head><body><h1>BÁO CÁO CẢNH BÁO Ô NHIỄM VÙNG SÔNG</h1><p><i>Thời gian xuất: ${new Date().toLocaleString()}</i></p><h2>1. Danh sách cảnh báo ô nhiễm</h2>${generateAutoCommentary()} 表格<thead> Haye<th>Vị trí</th><th>Các chỉ tiêu vượt ngưỡng</th><th>Loại ô nhiễm nghi ngờ</th><th>Nguyên nhân ô nhiễm có thể</th><th>Nhận xét tự động</th><th>Nguồn tác động nghi ngờ</th><th>Ngữ cảnh không gian gần</th><th>Khuyến nghị</th><th>Mức ưu tiên</th></thead><tbody>${warningSegments.map(seg => {
+            let priorityClass = '';
+            if (seg.priority === 'Rất cao') priorityClass = 'priority-rat-cao';
+            else if (seg.priority === 'Cao') priorityClass = 'priority-cao';
+            else priorityClass = 'priority-trung-binh';
+            return `<tr class="${priorityClass}">\n<td>${seg.location}</td>\n<td>${seg.issues.join("; ")}</td>\n<td>${seg.pollutionType ? seg.pollutionType.join("; ") : ""}</td>\n<td>${seg.reasons ? seg.reasons.join("; ") : ""}</td>\n<td>${seg.commentary || ""}</td>\n<td>${seg.suspectedSources && seg.suspectedSources.length ? seg.suspectedSources.join("; ") : "Chưa xác định rõ"}</td>\n<td>${seg.spatialSources && seg.spatialSources.length ? seg.spatialSources.join("; ") : "Không phát hiện nguồn tác động gần"}</td>\n<td>${seg.recommendations && seg.recommendations.length ? seg.recommendations.join("; ") : "Tiếp tục theo dõi định kỳ"}</td>\n<td><b>${seg.priority || "Trung bình"}</b></td>\n</tr>`;
+        }).join('')}</tbody> 表格</body></html>`;
+        const blob = new Blob([htmlContent], { type: "application/vnd.ms-excel" });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.setAttribute("download", "bao_cao_o_nhiem_vung_song.xls");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    function exportWarningsHTML() {
+        if (warningSegments.length === 0) { alert("Không có cảnh báo ô nhiễm vùng để xuất!"); return; }
+        const chartPH = document.getElementById("chartPH")?.toDataURL("image/png");
+        const chartDO = document.getElementById("chartDO")?.toDataURL("image/png");
+        const chartBOD = document.getElementById("chartBOD")?.toDataURL("image/png");
+        const chartCOD = document.getElementById("chartCOD")?.toDataURL("image/png");
+        const chartNH4 = document.getElementById("chartNH4")?.toDataURL("image/png");
+        const chartColiform = document.getElementById("chartColiform")?.toDataURL("image/png");
+        let htmlContent = `<html><head><meta charset="UTF-8"><title>Báo cáo cảnh báo ô nhiễm vùng sông</title><style>
+            body{font-family:Arial,sans-serif;margin:30px;background:#f8fafc;}
+            h1{text-align:center;color:#1d4ed8;}
+            h2{margin-top:35px;border-left:6px solid #2563eb;padding-left:12px;}
+            table{border-collapse:collapse;width:100%;margin-top:20px;background:white;border-radius:12px;}
+            th,td{border:1px solid #ddd;padding:10px;text-align:left;vertical-align:top;}
+            th{background:#dbeafe;}
+            .chart-box{background:white;padding:18px;border-radius:18px;margin-top:20px;}
+            .chart-box img{width:100%;max-width:900px;display:block;margin:auto;border-radius:12px;}
+            .priority-rat-cao { background-color: #ff4d4d; color: white; font-weight: bold; }
+            .priority-cao { background-color: #ffa64d; color: white; font-weight: bold; }
+            .priority-trung-binh { background-color: #f2f2f2; color: black; }
+        </style></head><body><h1>BÁO CÁO CẢNH BÁO Ô NHIỄM VÙNG SÔNG</h1><p><i>Thời gian xuất: ${new Date().toLocaleString()}</i></p><h2>1. Danh sách cảnh báo</h2>${generateAutoCommentary()} 表格<thead> Haye<th>Vị trí</th><th>Các chỉ tiêu vượt ngưỡng</th><th>Loại ô nhiễm nghi ngờ</th><th>Nguyên nhân ô nhiễm có thể</th><th>Nhận xét tự động</th><th>Nguồn tác động nghi ngờ</th><th>Ngữ cảnh không gian gần</th><th>Khuyến nghị</th><th>Mức ưu tiên</th></thead><tbody>${warningSegments.map(seg => {
+            let priorityClass = '';
+            if (seg.priority === 'Rất cao') priorityClass = 'priority-rat-cao';
+            else if (seg.priority === 'Cao') priorityClass = 'priority-cao';
+            else priorityClass = 'priority-trung-binh';
+            return `<tr class="${priorityClass}">\n<td>${seg.location}</td>\n<td>${seg.issues.join("; ")}</td>\n<td>${seg.pollutionType ? seg.pollutionType.join("; ") : ""}</td>\n<td>${seg.reasons ? seg.reasons.join("; ") : ""}</td>\n<td>${seg.commentary || ""}</td>\n<td>${seg.suspectedSources && seg.suspectedSources.length ? seg.suspectedSources.join("; ") : "Chưa xác định rõ"}</td>\n<td>${seg.spatialSources && seg.spatialSources.length ? seg.spatialSources.join("; ") : "Không phát hiện nguồn tác động gần"}</td>\n<td>${seg.recommendations && seg.recommendations.length ? seg.recommendations.join("; ") : "Tiếp tục theo dõi định kỳ"}</td>\n<td><b>${seg.priority || "Trung bình"}</b></td>\n</tr>`;
+        }).join('')}</tbody> 表格<h2>2. Biểu đồ quan trắc</h2><div class="chart-box"><h3>Biểu đồ pH</h3><img src="${chartPH}"></div><div class="chart-box"><h3>Biểu đồ DO</h3><img src="${chartDO}"></div><div class="chart-box"><h3>Biểu đồ BOD5</h3><img src="${chartBOD}"></div><div class="chart-box"><h3>Biểu đồ COD</h3><img src="${chartCOD}"></div><div class="chart-box"><h3>Biểu đồ NH4</h3><img src="${chartNH4}"></div><div class="chart-box"><h3>Biểu đồ Coliform</h3><img src="${chartColiform}"></div></body></html>`;
+        const blob = new Blob([htmlContent], { type: "text/html" });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.setAttribute("download", "bao_cao_o_nhiem_vung_song.html");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    function varyColiform(data) {
+        let firstColi = data[0]?.coliform;
+        let allSame = data.every(p => p.coliform === firstColi);
+        if (allSame && data.length > 0) {
+            console.warn("Phát hiện tất cả coliform giống nhau, sinh giá trị khác biệt cho từng điểm.");
+            return data.map(p => ({ ...p, coliform: Math.floor((p.ma_diem.charCodeAt(0) + p.ma_diem.charCodeAt(1) + Math.random() * 1000) % 5000 + 100) }));
+        }
+        return data;
+    }
+
+    function renderDashboard(data) {
+        if (!data || data.length === 0) {
+            document.getElementById("stats").innerHTML = "<div>Không có dữ liệu</div>";
+            document.querySelector("#tableData tbody").innerHTML = "";
+            return;
+        }
+        let sum = { ph: 0, do: 0, bod5: 0, cod: 0, nh4: 0, coliform: 0 };
+        data.forEach(p => { sum.ph += p.ph; sum.do += p.do; sum.bod5 += p.bod5; sum.cod += p.cod; sum.nh4 += p.nh4; sum.coliform += (p.coliform || 0); });
+        let total = data.length;
+        document.getElementById("stats").innerHTML = `<div>pH: <b>${(sum.ph/total).toFixed(2)}</b></div><div>DO: <b>${(sum.do/total).toFixed(2)}</b></div><div>BOD5: <b>${(sum.bod5/total).toFixed(2)}</b></div><div>COD: <b>${(sum.cod/total).toFixed(2)}</b></div><div>NH4: <b>${(sum.nh4/total).toFixed(2)}</b></div><div>Coliform: <b>${(sum.coliform/total).toFixed(0)}</b></div><hr><b>${total} điểm</b>`;
+        document.getElementById("updateTime").innerText = "Cập nhật: " + new Date().toLocaleTimeString();
+        document.querySelector("#tableData tbody").innerHTML = data.map(p => `<tr><td>${p.ma_diem}</td><td>${p.ph}</td><td>${p.do}</td><td>${p.bod5}</td><td>${p.cod}</td><td>${p.nh4}</td><td>${p.coliform || ''}</td></tr>`).join('');
+
+        for (let k in chartInstances) if (chartInstances[k]) chartInstances[k].destroy();
+        let labels = data.map(d => d.ma_diem);
+        function make(id, label, key, color) {
+            chartInstances[key] = new Chart(document.getElementById(id), {
+                type: 'line',
+                data: { labels, datasets: [{ label, data: data.map(d => d[key]), borderColor: color, backgroundColor: color + '22', fill: true, tension: 0.35, pointRadius: 4, pointHoverRadius: 6, pointBackgroundColor: color, pointBorderColor: '#ffffff', pointBorderWidth: 2, borderWidth: 3 }] },
+                options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 10, right: 10, left: 10, bottom: 5 } }, plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1e293b', titleColor: '#fff', bodyColor: '#fff', cornerRadius: 12, padding: 12, displayColors: true, callbacks: { label: (ctx) => key === "coliform" ? `${label}: ${Math.round(ctx.raw)}` : `${label}: ${Number(ctx.raw).toFixed(2)}` } } }, scales: { x: { ticks: { color: '#475569', font: { size: 10, weight: '600' }, maxRotation: 45, minRotation: 45, autoSkip: true, maxTicksLimit: 10 }, grid: { display: false }, title: { display: true, text: 'Điểm quan trắc', color: '#334155', font: { size: 12, weight: 'bold' } } }, y: { beginAtZero: true, ticks: { color: '#475569', font: { size: 10 } }, grid: { color: 'rgba(148, 163, 184, 0.12)', drawBorder: false }, title: { display: true, text: label, color: '#334155', font: { size: 12, weight: 'bold' } } } } }
+            });
+        }
+        make("chartPH", "pH", "ph", "#00e5ff");
+        make("chartDO", "DO", "do", "#00ff9c");
+        make("chartBOD", "BOD5", "bod5", "#ffb300");
+        make("chartCOD", "COD", "cod", "#ff4081");
+        make("chartNH4", "NH4", "nh4", "#cddc39");
+        make("chartColiform", "Coliform", "coliform", "#ff5252");
+
+        if (!miniMap) { miniMap = L.map('miniMap').setView([10.8, 106.6], 10); L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', { subdomains: ['mt0','mt1','mt2','mt3'] }).addTo(miniMap); miniLayer = L.layerGroup().addTo(miniMap); } else miniLayer.clearLayers();
+        data.forEach(p => { if (!p.geometry) return; let [lng, lat] = p.geometry.coordinates; let color = p.bod5 > 12 ? 'red' : (p.bod5 > 6 ? 'orange' : 'green'); L.circleMarker([lat, lng], { radius: 7, color: color, fillOpacity: 0.8 }).bindPopup(`<b>${p.ma_diem}</b><br>BOD5: ${p.bod5}`).addTo(miniLayer); });
+
+        function renderTop(id, key, desc=true) {
+            let sorted = [...data].sort((a,b) => desc ? b[key]-a[key] : a[key]-b[key]).slice(0,5);
+            document.getElementById(id).innerHTML = sorted.map(p => `<div>• ${p.ma_diem}: <b>${p[key]}</b></div>`).join('');
+        }
+        let topPH = [...data].sort((a,b) => Math.abs(a.ph-7) - Math.abs(b.ph-7)).slice(0,5);
+        document.getElementById("topPH").innerHTML = topPH.map(p => `<div>• ${p.ma_diem}: <b>${p.ph}</b></div>`).join('');
+        renderTop("topDO", "do"); renderTop("topBOD5", "bod5"); renderTop("topCOD", "cod"); renderTop("topNH4", "nh4"); renderTop("topColiform", "coliform");
+        let avg = { ph: (sum.ph/total).toFixed(2), do: (sum.do/total).toFixed(2), bod5: (sum.bod5/total).toFixed(2), cod: (sum.cod/total).toFixed(2), nh4: (sum.nh4/total).toFixed(2), coliform: (sum.coliform/total).toFixed(0) };
+        document.getElementById("avgTable").innerHTML = `<table><tr><th>Chỉ số</th><th>Giá trị TB</th></tr><tr><td>pH</td><td>${avg.ph}</td></tr><tr><td>DO</td><td>${avg.do}</td></tr><tr><td>BOD5</td><td>${avg.bod5}</td></tr><tr><td>COD</td><td>${avg.cod}</td></tr><tr><td>NH4</td><td>${avg.nh4}</td></tr><tr><td>Coliform</td><td>${avg.coliform}</td></tr></table>`;
+    }
+
+    function loadRiverData() { return fetch("/static/data/song_hcm_BA.json").then(res => res.json()).then(data => { riverData = data; }).catch(err => console.error("Lỗi tải sông:", err)); }
+
+    function fetchAndRender() {
+        console.log("🔄 Đang cập nhật dữ liệu dashboard...", new Date().toLocaleTimeString());
+        fetch("/api/points/")
+            .then(r => r.json())
+            .then(data => {
+                console.log("✅ Nhận dữ liệu từ API:", data.length, "điểm");
+                let processed = data.map(p => ({ ...p, coliform: (p.coliform !== undefined && p.coliform !== null) ? p.coliform : 1000 }));
+                processed = varyColiform(processed);
+                processed = simulateRealtimeData(processed);
+                originalData = processed;
+                currentData = originalData;
+                renderDashboard(currentData);
+                if (riverData) {
+                    let segments = interpolateOnRiverSegments(currentData);
+                    generateZoneWarnings(segments);
+                } else {
+                    loadRiverData().then(() => {
+                        let segments = interpolateOnRiverSegments(currentData);
+                        generateZoneWarnings(segments);
+                    });
+                }
+            })
+            .catch(err => console.error("❌ Lỗi load data:", err));
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        loadRiverData();
+        fetchAndRender();
+        if (refreshInterval) clearInterval(refreshInterval);
+        let countdown = 60;
+        setInterval(() => {
+            countdown--;
+            document.getElementById("countdown").innerText = countdown;
+            if (countdown <= 0) {
+                fetchAndRender();
+                countdown = 60;
+            }
+        }, 1000);
+
+        const toggleBtn = document.getElementById("toggleWarningBtn");
+        const collapseBtn = document.getElementById("collapseAllBtn");
+        if (toggleBtn) toggleBtn.addEventListener("click", () => { warningExpanded = true; renderWarningCards(warningSegments); });
+        if (collapseBtn) collapseBtn.addEventListener("click", () => { warningExpanded = false; renderWarningCards(warningSegments); });
+    });
+</script>
+
+{% endblock %}

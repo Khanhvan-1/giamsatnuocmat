@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+db.sqlite3
+
+# Django
+*.log
+media/
+
+# Node.js
+backend/node_modules/
+node_modules/
+npm-debug.log
+
+# VS Code
+.vscode/
+
+# Environment
+.env
+venv/
+env/
+
+# System
+.DS_Store
+Thumbs.db

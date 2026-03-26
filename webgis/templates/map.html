@@ -1,0 +1,1291 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div id="map"></div>
+
+<a href="/dashboard" id="btnDashboard"> Thống kê</a>
+
+<!-- Legend tổng hợp (trung bình 6 chỉ tiêu) -->
+<div id="legend">
+</div>
+
+<div id="interpolationControl" class="interpolation-control">
+    <b> Nội suy:</b><br>
+    <button id="btnCombinedInterp" style="background:#ff9800; color:white; font-weight:bold;"> Nội suy </button><br>
+    <button onclick="generateSingleInterpolation('ph')">pH</button>
+    <button onclick="generateSingleInterpolation('do')">DO</button>
+    <button onclick="generateSingleInterpolation('bod5')">BOD5</button>
+    <button onclick="generateSingleInterpolation('cod')">COD</button>
+    <button onclick="generateSingleInterpolation('nh4')">NH4</button>
+    <button onclick="generateSingleInterpolation('coliform')">Coliform</button>
+    <button id="btnFlow">Dòng chảy sông</button><br>
+    <button id="btnOff">Tắt lớp</button>
+</div>
+
+<style>
+    /* Giữ nguyên style cũ của map */
+    #map {
+        height: 100vh;
+        width: 100vw;
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 1;
+    }
+    #btnDashboard {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: white;
+        padding: 10px 16px;
+        border-radius: 6px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        font-weight: bold;
+        text-decoration: none;
+        color: #333;
+        z-index: 1000;
+        border: 1px solid #ddd;
+        transition: background 0.2s;
+    }
+    #btnDashboard:hover { background: #f0f0f0; }
+
+    #legend {
+        position: absolute;
+        bottom: 30px;
+        right: 20px;
+        background: white;
+        padding: 12px 16px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        font-size: 14px;
+        z-index: 1000;
+        line-height: 1.6;
+        min-width: 220px;
+    }
+    #legend h4 { margin: 0 0 8px 0; color: #555; }
+
+    #legend span {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+    #legend div { display: flex; align-items: center; }
+
+    .leaflet-control-layers {
+        margin-top: 80px !important;
+        background: white;
+        border-radius: 6px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        padding: 10px;
+        max-width: 220px;
+    }
+
+    .interpolation-control {
+        position: absolute;
+        bottom: 30px;
+        left: 20px;
+        background: white;
+        padding: 12px 16px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        z-index: 1000;
+        font-size: 13px;
+        max-width: 260px;
+        border-left: 4px solid #ff9800;
+    }
+    .interpolation-control b { display: block; margin-bottom: 8px; color: #555; }
+
+    .interpolation-control button {
+        margin: 4px 4px 4px 0;
+        padding: 6px 10px;
+        background: #f5f5f5;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: all 0.2s;
+    }
+    .interpolation-control button:hover { background: #e0e0e0; border-color: #999; }
+
+    .my-cluster-icon {
+        background-color: rgba(33, 150, 243, 0.8);
+        color: white; font-weight: bold; border-radius: 50%;
+        text-align: center; line-height: 30px; box-shadow: 0 0 0 2px white;
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // ==================== CẤU HÌNH BẢN ĐỒ ====================
+        var streetMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap, CartoDB'
+        });
+        var googleSat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            maxZoom: 20,
+            subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+            attribution: '&copy; Google'
+        });
+        var googleTerrain = L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+            maxZoom: 20,
+            subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+            attribution: '&copy; Google'
+        });
+        var googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+            maxZoom: 20,
+            subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+            attribution: '&copy; Google'
+        });
+
+        var map = L.map('map', {
+            center: [10.75, 106.65],
+            zoom: 11,
+            layers: [streetMap]
+        });
+
+        var baseMaps = {
+            "🗺️ Không nhãn": streetMap,
+            "🛰️ Google Satellite": googleSat,
+            "⛰️ Google Terrain": googleTerrain,
+            "🗺️ Google Hybrid": googleHybrid
+        };
+
+        // Các biến toàn cục
+        var originalPointData = [];
+        var currentPointData = [];
+        var boundaryLayer, pointsLayer;
+        var flowLayer = null;
+        var combinedLayer = null;
+        var riverDataCache = null;
+        var overlayLayers = {};
+        var focusedRiverLine = null;
+        var mergedPollutionSegments = [];
+        // ==================== HÀM MÀU TỔNG HỢP (TRUNG BÌNH) ====================
+
+        // Hàm zoom từ tham số bounds và center
+        function zoomFromParams() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const center = urlParams.get('center');
+            const bounds = urlParams.get('bounds');
+
+            // Ưu tiên bounds nếu có
+            if (bounds) {
+                const parts = bounds.split(',');
+                if (parts.length === 4) {
+                    const lat1 = parseFloat(parts[0]);
+                    const lng1 = parseFloat(parts[1]);
+                    const lat2 = parseFloat(parts[2]);
+                    const lng2 = parseFloat(parts[3]);
+                    if (!isNaN(lat1) && !isNaN(lng1) && !isNaN(lat2) && !isNaN(lng2)) {
+                        const southWest = [Math.min(lat1, lat2), Math.min(lng1, lng2)];
+                        const northEast = [Math.max(lat1, lat2), Math.max(lng1, lng2)];
+                        map.fitBounds([southWest, northEast], { padding: [30, 30] });
+                        return;
+                    }
+                }
+            }
+
+            // Nếu không có bounds, dùng center
+            if (center) {
+                const centerParts = center.split(',');
+                if (centerParts.length === 2) {
+                    const lat = parseFloat(centerParts[0]);
+                    const lng = parseFloat(centerParts[1]);
+                    if (!isNaN(lat) && !isNaN(lng)) {
+                        map.setView([lat, lng], 14);
+                    }
+                }
+            }
+        }
+
+        // Hàm vẽ đoạn sông được highlight dựa trên tham số coords
+        let highlightedSegment = null;
+        function drawSegmentFromCoords() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const coordsStr = urlParams.get('coords');
+            if (!coordsStr) return;
+
+            // Xóa đường highlight cũ nếu có
+            if (highlightedSegment && map.hasLayer(highlightedSegment)) {
+                map.removeLayer(highlightedSegment);
+            }
+
+            // Chuyển chuỗi thành mảng các điểm [lat, lng]
+            const points = coordsStr.split(';').map(pair => {
+                const [lat, lng] = pair.split(',').map(Number);
+                return [lat, lng];
+            }).filter(p => p.length === 2 && !isNaN(p[0]) && !isNaN(p[1]));
+
+            if (points.length < 2) return;
+
+            // Vẽ polyline màu đỏ đậm, nổi bật
+            highlightedSegment = L.polyline(points, {
+                color: '#ff0000',
+                weight: 12,
+                opacity: 0.95,
+                lineCap: 'round',
+                lineJoin: 'round'
+            }).addTo(map);
+
+            // Hiển thị popup thông tin (có thể lấy từ tham số khác nếu muốn)
+            highlightedSegment.bindPopup('⚠ Đoạn sông đang được cảnh báo ô nhiễm').openPopup();
+
+            // Nếu không có bounds, thì zoom vào đoạn
+            const boundsParam = urlParams.get('bounds');
+            if (!boundsParam) {
+                map.fitBounds(highlightedSegment.getBounds(), { padding: [30, 30] });
+            }
+        }
+
+        // Gọi các hàm sau khi map đã sẵn sàng
+        let autoInterpTriggered = false;
+        function activateAutoInterpolation() {
+            if (autoInterpTriggered) return;
+            const urlParams = new URLSearchParams(window.location.search);
+            const coordsStr = urlParams.get('coords');
+            if (!coordsStr) return;
+            autoInterpTriggered = true;
+            const waitForRiver = setInterval(() => {
+                if (riverDataCache && highlightedSegment && map.hasLayer(highlightedSegment)) {
+                    clearInterval(waitForRiver);
+                    let bounds = highlightedSegment.getBounds();
+                    generateInterpolationForSegment(bounds);  
+                }
+            }, 200);
+        }
+        setTimeout(() => {
+            zoomFromParams();
+            drawSegmentFromCoords();
+            activateAutoInterpolation();
+        }, 500);
+
+        function getWQIColor(wqi) {
+            if (wqi < 1) return '#1a9850';
+            if (wqi < 1.2) return '#91cf60';
+            if (wqi < 1.5) return '#fee08b';
+            if (wqi < 2) return '#fc8d59';
+            if (wqi < 2.5) return '#f46d43';
+            if (wqi < 3) return '#d73027';
+            return '#a50026';
+        }
+
+        function updateLegend(type = "combined") {
+            const legend = document.getElementById("legend");
+            if (!legend) return;
+
+            let title = "Giá trị ô nhiễm";
+            let content = "";
+            let note = "";
+
+            if (type === "combined") {
+                title = "Giá trị ô nhiễm tổng hợp";
+                content = `
+                    <div><span style="background:#1a9850;"></span> &lt; 1 (Rất tốt)</div>
+                    <div><span style="background:#91cf60;"></span> 1 - 1.2 (Tốt)</div>
+                    <div><span style="background:#fee08b;"></span> 1.2 - 1.5 (Trung bình)</div>
+                    <div><span style="background:#fc8d59;"></span> 1.5 - 2 (Ô nhiễm nhẹ)</div>
+                    <div><span style="background:#f46d43;"></span> 2 - 2.5 (Ô nhiễm vừa)</div>
+                    <div><span style="background:#d73027;"></span> 2.5 - 3 (Ô nhiễm nặng)</div>
+                    <div><span style="background:#a50026;"></span> &gt; 3 (Ô nhiễm rất nặng)</div>
+                `;
+                note = "Mức đánh giá tổng hợp 6 chỉ số.";
+            }
+
+            else if (type === "ph") {
+                title = "Chỉ số pH";
+                content = `
+                    <div><span style="background:#d73027;"></span> &lt; 5.5 (Axit mạnh)</div>
+                    <div><span style="background:#fc8d59;"></span> 5.5 - 6.5 (Axit nhẹ)</div>
+                    <div><span style="background:#91cf60;"></span> 6.5 - 8.5 (Tốt / Trung tính)</div>
+                    <div><span style="background:#4575b4;"></span> 8.5 - 9.0 (Bazơ nhẹ)</div>
+                    <div><span style="background:#313695;"></span> &gt; 9.0 (Bazơ cao)</div>
+                `;
+                note = "pH lý tưởng cho nước mặt: 6.5 - 8.5.";
+            }
+
+            else if (type === "do") {
+                title = "Chỉ số DO (mg/L)";
+                content = `
+                    <div><span style="background:#a50026;"></span> &lt; 2 (Rất kém)</div>
+                    <div><span style="background:#d73027;"></span> 2 - 4 (Kém)</div>
+                    <div><span style="background:#f46d43;"></span> 4 - 5 (Trung bình)</div>
+                    <div><span style="background:#91cf60;"></span> 5 - 6 (Khá)</div>
+                    <div><span style="background:#1a9850;"></span> &gt; 6 (Tốt)</div>
+                `;
+                note = "DO càng cao thì nước càng tốt.";
+            }
+
+            else if (type === "bod5") {
+                title = "Chỉ số BOD5 (mg/L)";
+                content = `
+                    <div><span style="background:#1a9850;"></span> &lt; 4 (Tốt)</div>
+                    <div><span style="background:#91cf60;"></span> 4 - 6 (Khá)</div>
+                    <div><span style="background:#fee08b;"></span> 6 - 15 (Trung bình)</div>
+                    <div><span style="background:#f46d43;"></span> 15 - 25 (Ô nhiễm)</div>
+                    <div><span style="background:#a50026;"></span> &gt; 25 (Ô nhiễm nặng)</div>
+                `;
+                note = "BOD5 càng cao → ô nhiễm hữu cơ càng lớn.";
+            }
+
+            else if (type === "cod") {
+                title = "Chỉ số COD (mg/L)";
+                content = `
+                    <div><span style="background:#1a9850;"></span> &lt; 10 (Tốt)</div>
+                    <div><span style="background:#91cf60;"></span> 10 - 15 (Khá)</div>
+                    <div><span style="background:#fee08b;"></span> 15 - 30 (Trung bình)</div>
+                    <div><span style="background:#f46d43;"></span> 30 - 50 (Ô nhiễm)</div>
+                    <div><span style="background:#a50026;"></span> &gt; 50 (Ô nhiễm nặng)</div>
+                `;
+                note = "COD càng cao → nước càng ô nhiễm hóa học.";
+            }
+
+            else if (type === "nh4") {
+                title = "Chỉ số NH4 (mg/L)";
+                content = `
+                    <div><span style="background:#1a9850;"></span> &lt; 0.3 (Tốt)</div>
+                    <div><span style="background:#91cf60;"></span> 0.3 - 0.5 (Khá)</div>
+                    <div><span style="background:#fee08b;"></span> 0.5 - 1.0 (Trung bình)</div>
+                    <div><span style="background:#f46d43;"></span> 1.0 - 2.0 (Ô nhiễm)</div>
+                    <div><span style="background:#a50026;"></span> &gt; 2.0 (Ô nhiễm nặng)</div>
+                `;
+                note = "NH4 cao thường liên quan nước thải sinh hoạt / công nghiệp.";
+            }
+
+            else if (type === "coliform") {
+                title = "Chỉ số Coliform (MPN/100mL)";
+                content = `
+                    <div><span style="background:#1a9850;"></span> &lt; 2,500 (Tốt)</div>
+                    <div><span style="background:#91cf60;"></span> 2,500 - 5,000 (Khá)</div>
+                    <div><span style="background:#fee08b;"></span> 5,000 - 7,500 (Trung bình)</div>
+                    <div><span style="background:#f46d43;"></span> 7,500 - 10,000 (Ô nhiễm)</div>
+                    <div><span style="background:#a50026;"></span> &gt; 10,000 (Ô nhiễm nặng)</div>
+                `;
+                note = "Coliform cao → nguy cơ ô nhiễm vi sinh.";
+            }
+
+            legend.innerHTML = `
+                <h4>${title}</h4>
+                ${content}
+                <hr style="margin:8px 0; border:none; border-top:1px solid #ddd;">
+                <div style="font-size:12px; color:#666; line-height:1.4;">
+                    ${note}
+                </div>
+            `;
+        }
+
+        function getPollutionColor(level) {
+            if (level < 1) return '#1a9850';
+            if (level < 1.2) return '#91cf60';
+            if (level < 1.5) return '#fee08b';
+            if (level < 2) return '#fc8d59';
+            if (level < 2.5) return '#f46d43';
+            if (level < 3) return '#d73027';
+            return '#a50026';
+        }
+
+        
+
+        function getSingleParameterColor(type, value) {
+            if (value == null || isNaN(value)) return '#999';
+
+            // pH: tốt ở giữa, xấu ở 2 đầu
+            if (type === 'ph') {
+                if (value < 5.5) return '#d73027';   // axit mạnh
+                if (value < 6.5) return '#fc8d59';   // axit nhẹ
+                if (value <= 8.5) return '#91cf60';  // tốt
+                if (value <= 9.0) return '#4575b4';  // bazơ nhẹ
+                return '#313695';                    // bazơ cao
+            }
+
+            // DO: càng cao càng tốt
+            if (type === 'do') {
+                if (value < 2) return '#a50026';
+                if (value < 4) return '#d73027';
+                if (value < 5) return '#f46d43';
+                if (value < 6) return '#91cf60';
+                return '#1a9850';
+            }
+
+            // BOD5: càng cao càng xấu
+            if (type === 'bod5') {
+                if (value < 4) return '#1a9850';
+                if (value < 6) return '#91cf60';
+                if (value < 15) return '#fee08b';
+                if (value < 25) return '#f46d43';
+                return '#a50026';
+            }
+
+            // COD: càng cao càng xấu
+            if (type === 'cod') {
+                if (value < 10) return '#1a9850';
+                if (value < 15) return '#91cf60';
+                if (value < 30) return '#fee08b';
+                if (value < 50) return '#f46d43';
+                return '#a50026';
+            }
+
+            // NH4: càng cao càng xấu
+            if (type === 'nh4') {
+                if (value < 0.3) return '#1a9850';
+                if (value < 0.5) return '#91cf60';
+                if (value < 1.0) return '#fee08b';
+                if (value < 2.0) return '#f46d43';
+                return '#a50026';
+            }
+
+            // Coliform: càng cao càng xấu
+            if (type === 'coliform') {
+                if (value < 2500) return '#1a9850';
+                if (value < 5000) return '#91cf60';
+                if (value < 7500) return '#fee08b';
+                if (value < 10000) return '#f46d43';
+                return '#a50026';
+            }
+
+            return '#999';
+        }
+
+        function normalizeIndicator(type, value) {
+            if (value == null || isNaN(value)) return 1;
+
+            if (type === "ph") {
+                if (value >= 6.5 && value <= 8.5) return 1;
+                return 1 + Math.min(2.5, Math.abs(value - 7) * 1.2);
+            }
+
+            if (type === "do") {
+                if (value >= 6.5) return 1;
+                if (value >= 5.5) return 1.3;
+                if (value >= 4.5) return 1.8;
+                if (value >= 3.5) return 2.4;
+                return 3;
+            }
+
+           if (type === "bod5") {
+                if (value <= 3) return 1;
+                if (value <= 5) return 1.3;
+                if (value <= 8) return 1.8;
+                if (value <= 12) return 2.4;
+                return 3;
+            }
+
+            if (type === "cod") {
+                if (value <= 8) return 1;
+                if (value <= 12) return 1.3;
+                if (value <= 20) return 1.8;
+                if (value <= 30) return 2.4;
+                return 3;
+            }
+
+            if (type === "nh4") {
+                if (value <= 0.08) return 1;
+                if (value <= 0.15) return 1.3;
+                if (value <= 0.3) return 1.8;
+                if (value <= 0.5) return 2.4;
+                return 3;
+            }
+
+            if (type === "coliform") {
+                if (value <= 800) return 1;
+                if (value <= 1500) return 1.3;
+                if (value <= 3000) return 1.8;
+                if (value <= 6000) return 2.4;
+                return 3;
+            }
+
+            return 1;
+        }
+
+        function getRiverCoordsFromURL() {
+            const params = new URLSearchParams(window.location.search);
+            const coordsStr = params.get("coords");
+            if (!coordsStr) return null;
+
+            try {
+                const coords = coordsStr.split(";").map(pair => {
+                    const [lat, lng] = pair.split(",").map(Number);
+                    return [lat, lng];
+                }).filter(c => c.length === 2 && !isNaN(c[0]) && !isNaN(c[1]));
+
+                return coords.length >= 2 ? coords : null;
+            } catch (err) {
+                console.error("Lỗi đọc coords từ URL:", err);
+                return null;
+            }
+        }
+
+        // ==================== TIỆN ÍCH ====================
+        function isFeatureInHCM(feature) {
+            var hcmBounds = { minLng: 106.3, maxLng: 107.0, minLat: 10.3, maxLat: 11.3 };
+            var coords = [];
+            if (feature.geometry.type === 'LineString') coords = feature.geometry.coordinates;
+            else if (feature.geometry.type === 'MultiLineString') feature.geometry.coordinates.forEach(line => line.forEach(c => coords.push(c)));
+            else return false;
+            if (coords.length === 0) return false;
+            var minLng = Math.min(...coords.map(c => c[0]));
+            var maxLng = Math.max(...coords.map(c => c[0]));
+            var minLat = Math.min(...coords.map(c => c[1]));
+            var maxLat = Math.max(...coords.map(c => c[1]));
+            return (maxLng >= hcmBounds.minLng && minLng <= hcmBounds.maxLng &&
+                    maxLat >= hcmBounds.minLat && minLat <= hcmBounds.maxLat);
+        }
+
+        // ==================== SÔNG & DÒNG CHẢY ====================
+        function drawRiverFlow(data) {
+            var antPathGroup = L.layerGroup();
+            var filteredFeatures = data.features.filter(isFeatureInHCM);
+            var maxFeatures = 200;
+            var featuresToDraw = filteredFeatures.slice(0, maxFeatures);
+            featuresToDraw.forEach(feature => {
+                var coords = [];
+                if (feature.geometry.type === 'LineString') coords = feature.geometry.coordinates.map(c => [c[1], c[0]]);
+                else if (feature.geometry.type === 'MultiLineString') feature.geometry.coordinates.forEach(line => line.forEach(c => coords.push([c[1], c[0]])));
+                if (coords.length >= 2) {
+                    var antPath = L.polyline.antPath(coords, {
+                        delay: 400,
+                        dashArray: [10, 20],
+                        weight: 6,
+                        color: '#ff3333',
+                        pulseColor: '#ffffff',
+                        paused: false,
+                        reverse: false,
+                        hardwareAccelerated: true
+                    });
+                    antPathGroup.addLayer(antPath);
+                }
+            });
+            flowLayer = antPathGroup.addTo(map);
+            overlayLayers["Dòng chảy sông"] = flowLayer;
+            updateLayerControl();
+        }
+
+        function createRiverFlow() {
+            if (flowLayer && map.hasLayer(flowLayer)) {
+                map.removeLayer(flowLayer);
+            }
+            delete overlayLayers["Dòng chảy sông"];
+
+            fetch("/static/data/song_hcm_BA.json")
+                .then(res => res.json())
+                .then(data => {
+                    if (!data || !data.features) return;
+                    riverDataCache = data;
+                    drawRiverFlow(data);
+                })
+                .catch(err => console.error("Lỗi load sông:", err));
+        }
+
+        // ==================== VẼ ĐIỂM QUAN TRẮC ====================
+        function renderPoints() {
+            if (pointsLayer) map.removeLayer(pointsLayer);
+            var markersCluster = L.markerClusterGroup({
+                maxClusterRadius: 40,
+                iconCreateFunction: (cluster) => L.divIcon({ 
+                    html: '<b>' + cluster.getChildCount() + '</b>', 
+                    className: 'my-cluster-icon', iconSize: [30, 30] 
+                })
+            });
+
+            currentPointData.forEach(p => {
+                if (!p.geometry?.coordinates) return;
+                let lat = p.geometry.coordinates[1];
+                let lng = p.geometry.coordinates[0];
+                let color = '#3388ff';
+                let marker = L.circleMarker([lat, lng], { radius: 7, color: color, fillOpacity: 0.9, weight: 1 })
+                    .bindPopup(`<b>${p.ma_diem}</b><br>pH: ${p.ph}<br>DO: ${p.do}<br>BOD5: ${p.bod5}<br>COD: ${p.cod}<br>NH4: ${p.nh4}<br>Coliform: ${p.coliform}`);
+                markersCluster.addLayer(marker);
+            });
+
+            pointsLayer = markersCluster.addTo(map);
+            overlayLayers["Điểm quan trắc"] = pointsLayer;
+            updateLayerControl();
+        }
+
+        // Sinh biến động với giá trị luôn dương (>0)
+        function generateFluctuation(baseValue, property) {
+            var ranges = { ph: 0.7, do: 1.0, bod5: 2.5, cod: 6, nh4: 0.4, coliform: 600 };
+            var range = ranges[property] || 0;
+            var delta = (Math.random() * 2 - 1) * range;
+            var newVal = baseValue + delta;
+
+            if (property === 'coliform') {
+                newVal = Math.max(1, newVal);
+            } else {
+                newVal = Math.max(0.01, newVal);
+            }
+
+            if (property === 'ph') newVal = Math.min(14, newVal);
+            if (property === 'do') newVal = Math.min(20, newVal);
+
+            return Number(newVal.toFixed(2));
+        }
+
+        // IDW cho nội suy
+        function idwValue(points, lat, lng, power = 3, maxPoints = 3) {
+            if (!points || points.length === 0) return null;
+            let sorted = points.map(p => ({ ...p, d: Math.sqrt((p.lat - lat)**2 + (p.lng - lng)**2) })).sort((a,b) => a.d - b.d).slice(0, maxPoints);
+            let numerator = 0, denominator = 0;
+            for (let p of sorted) {
+                if (p.d === 0) return p.val;
+                let w = 1 / Math.pow(p.d, power);
+                numerator += w * p.val;
+                denominator += w;
+            }
+            return numerator / denominator;
+        }
+
+        // Tính WQI cho một đoạn sông
+       function computeWQIForSegment(ph, doVal, bod, cod, nh4, coli) {
+        let i_ph  = normalizeIndicator("ph", ph);
+        let i_do  = normalizeIndicator("do", doVal);
+        let i_bod = normalizeIndicator("bod5", bod);
+        let i_cod = normalizeIndicator("cod", cod);
+        let i_nh4 = normalizeIndicator("nh4", nh4);
+        let i_coli= normalizeIndicator("coliform", coli);
+
+        // 🔥 tăng trọng số cho các chỉ tiêu ô nhiễm thực tế hơn
+        let weighted =
+            (i_ph * 0.8) +
+            (i_do * 1.4) +
+            (i_bod * 1.3) +
+            (i_cod * 1.3) +
+            (i_nh4 * 1.5) +
+            (i_coli * 1.5);
+
+        return weighted / (0.8 + 1.4 + 1.3 + 1.3 + 1.5 + 1.5);
+        }
+
+        // Nội suy và tạo cảnh báo (trả về mảng các cảnh báo)
+        function generateWarningsFromData(pointsData) {
+            if (!riverDataCache) return [];
+
+            let pointsPH = pointsData.filter(p => p.geometry && p.ph != null).map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.ph }));
+            let pointsDO = pointsData.filter(p => p.geometry && p.do != null).map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.do }));
+            let pointsBOD = pointsData.filter(p => p.geometry && p.bod5 != null).map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.bod5 }));
+            let pointsCOD = pointsData.filter(p => p.geometry && p.cod != null).map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.cod }));
+            let pointsNH4 = pointsData.filter(p => p.geometry && p.nh4 != null).map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.nh4 }));
+            let pointsColi = pointsData.filter(p => p.geometry && p.coliform != null).map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.coliform }));
+
+            let warnings = [];
+
+            riverDataCache.features.forEach((feature, featureIndex) => {
+                if (!isFeatureInHCM(feature)) return;
+
+                let coords = [];
+                if (feature.geometry.type === "LineString") coords = feature.geometry.coordinates;
+                else if (feature.geometry.type === "MultiLineString") coords = feature.geometry.coordinates.flat();
+
+                coords = coords.filter((c, i, arr) =>
+                    i === 0 || !(c[0] === arr[i - 1][0] && c[1] === arr[i - 1][1])
+                );
+
+                for (let i = 0; i < coords.length - 1; i++) {
+                    let p1 = coords[i];
+                    let p2 = coords[i + 1];
+                    if (!p1 || !p2) continue;
+
+                    let cx = (p1[1] + p2[1]) / 2;
+                    let cy = (p1[0] + p2[0]) / 2;
+
+                    let ph = idwValue(pointsPH, cx, cy);
+                    let doVal = idwValue(pointsDO, cx, cy);
+                    let bod = idwValue(pointsBOD, cx, cy);
+                    let cod = idwValue(pointsCOD, cx, cy);
+                    let nh4 = idwValue(pointsNH4, cx, cy);
+                    let coli = idwValue(pointsColi, cx, cy);
+
+                    let wqi = computeWQIForSegment(ph, doVal, bod, cod, nh4, coli);
+
+                    warnings.push({
+                        featureIndex: featureIndex,
+                        localIndex: i,
+                        segment_id: `${feature.id || featureIndex}_${i}`,
+                        start: { lat: p1[1], lng: p1[0] },
+                        end: { lat: p2[1], lng: p2[0] },
+                        location: { lat: cx, lng: cy },
+                        wqi: wqi,
+                        pollutionLevel: getPollutionLevel(wqi),
+                        values: { ph, do: doVal, bod5: bod, cod, nh4, coliform: coli }
+                    });
+                }
+            });
+
+            return warnings;
+        }
+
+        // Lưu cảnh báo vào database
+        function saveWarningsToDB(warnings) {
+            if (!warnings || warnings.length === 0) {
+                console.log("⚠ Không có warning để lưu");
+                return;
+            }
+
+            // 🔥 Giới hạn số warning gửi lên (tránh payload quá lớn)
+            const limitedWarnings = warnings.slice(0, 60).map(w => ({
+                segment_id: w.segment_id,
+                location: w.location,
+                start: w.start,
+                end: w.end,
+                path: (w.path || []).slice(0, 20),
+                pollutionLevel: w.pollutionLevel,
+                pollutionText: w.pollutionText || getLevelText(w.pollutionLevel),
+                length_segments: w.length_segments || 1,
+                wqi: w.wqi,
+                values: w.values
+            }));
+
+            console.log(`📤 Đang gửi ${limitedWarnings.length}/${warnings.length} warnings lên DB`);
+
+            fetch('http://localhost:3000/api/reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ warnings: limitedWarnings })
+            })
+            .then(async res => {
+                const text = await res.text();
+
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${text}`);
+                }
+
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    throw new Error("Response không phải JSON hợp lệ: " + text);
+                }
+            })
+            .then(data => {
+                console.log("✅ Lưu warnings thành công:", data);
+            })
+            .catch(err => {
+                console.error('❌ Lỗi lưu cảnh báo:', err);
+            });
+        }
+
+        function getPollutionLevel(wqi) {
+            if (wqi < 1) return "very_good";      // xanh đậm
+            if (wqi < 1.2) return "good";         // xanh lá
+            if (wqi < 1.5) return "medium";       // vàng
+            if (wqi < 2) return "light";          // cam nhạt
+            if (wqi < 2.5) return "moderate";     // cam
+            if (wqi < 3) return "heavy";          // đỏ cam
+            return "very_heavy";                  // đỏ đậm
+        }
+
+        function getLevelColor(level) {
+            switch(level) {
+                case "very_good": return "#1a9850";   // xanh đậm
+                case "good": return "#91cf60";        // xanh lá
+                case "medium": return "#fee08b";      // vàng
+                case "light": return "#fc8d59";       // cam nhạt
+                case "moderate": return "#f46d43";    // cam
+                case "heavy": return "#d73027";       // đỏ
+                case "very_heavy": return "#a50026";  // đỏ đậm
+                default: return "#999";
+            }
+        }
+
+        function getLevelText(level) {
+            switch(level) {
+                case "very_good": return "Rất tốt";
+                case "good": return "Tốt";
+                case "medium": return "Trung bình";
+                case "light": return "Ô nhiễm nhẹ";
+                case "moderate": return "Ô nhiễm vừa";
+                case "heavy": return "Ô nhiễm nặng";
+                case "very_heavy": return "Ô nhiễm rất nặng";
+                default: return "Không xác định";
+            }
+        }
+
+        function mergeNearbyWarningsSameLevel(warnings, maxDistance = 0.003) {
+            if (!warnings || warnings.length === 0) return [];
+
+            warnings = warnings.filter(w =>
+                w.location &&
+                typeof w.location.lat === "number" &&
+                typeof w.location.lng === "number" &&
+                w.wqi !== undefined &&
+                w.wqi !== null
+            );
+
+            // 🔥 sort chuẩn theo nhánh sông + thứ tự segment
+            warnings.sort((a, b) => {
+                if (a.featureIndex !== b.featureIndex) return a.featureIndex - b.featureIndex;
+                return a.localIndex - b.localIndex;
+            });
+
+            let merged = [];
+            let currentGroup = [warnings[0]];
+
+            function getDistance(w1, w2) {
+                const dx = w1.location.lng - w2.location.lng;
+                const dy = w1.location.lat - w2.location.lat;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+
+            for (let i = 1; i < warnings.length; i++) {
+                const prev = currentGroup[currentGroup.length - 1];
+                const curr = warnings[i];
+
+                const sameFeature = prev.featureIndex === curr.featureIndex;
+                const sameLevel = prev.pollutionLevel === curr.pollutionLevel;
+                const continuous = curr.localIndex === prev.localIndex + 1;
+                const nearEnough = getDistance(prev, curr) <= maxDistance;
+
+                if (sameFeature && sameLevel && continuous && nearEnough) {
+                    currentGroup.push(curr);
+                } else {
+                    merged.push(buildMergedWarningSameLevel(currentGroup));
+                    currentGroup = [curr];
+                }
+            }
+
+            if (currentGroup.length > 0) {
+                merged.push(buildMergedWarningSameLevel(currentGroup));
+            }
+
+            return merged;
+        }
+
+        function buildMergedWarningSameLevel(group) {
+            const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+
+            const phVals = group.map(w => w.values?.ph).filter(v => v != null);
+            const doVals = group.map(w => w.values?.do).filter(v => v != null);
+            const bodVals = group.map(w => w.values?.bod5).filter(v => v != null);
+            const codVals = group.map(w => w.values?.cod).filter(v => v != null);
+            const nh4Vals = group.map(w => w.values?.nh4).filter(v => v != null);
+            const coliVals = group.map(w => w.values?.coliform).filter(v => v != null);
+            const wqiVals = group.map(w => w.wqi).filter(v => v != null);
+
+            const start = group[0].start;
+            const end = group[group.length - 1].end;
+            const pollutionLevel = group[0].pollutionLevel;
+
+            return {
+                segment_id: `segment_${group[0].featureIndex}_${group[0].localIndex}_${group[group.length - 1].localIndex}`,
+                featureIndex: group[0].featureIndex,
+                start: start,
+                end: end,
+                path: [
+                    [start.lat, start.lng],
+                    ...group.map(g => [g.end.lat, g.end.lng])
+                ],
+                location: {
+                    lat: avg(group.map(w => w.location.lat)),
+                    lng: avg(group.map(w => w.location.lng))
+                },
+                length_segments: group.length,
+                pollutionLevel: pollutionLevel,
+                pollutionText: getLevelText(pollutionLevel),
+                wqi: wqiVals.length ? avg(wqiVals) : null,
+                values: {
+                    ph: phVals.length ? avg(phVals) : null,
+                    do: doVals.length ? avg(doVals) : null,
+                    bod5: bodVals.length ? avg(bodVals) : null,
+                    cod: codVals.length ? avg(codVals) : null,
+                    nh4: nh4Vals.length ? avg(nh4Vals) : null,
+                    coliform: coliVals.length ? avg(coliVals) : null
+                }
+            };
+        }
+
+        function drawMergedPollutionSegments(segments) {
+            if (combinedLayer) {
+                map.removeLayer(combinedLayer);
+            }
+
+            let lines = [];
+
+            segments.forEach(seg => {
+                if (!seg.path || seg.path.length < 2) return;
+
+                let color = getLevelColor(seg.pollutionLevel);
+
+                let line = L.polyline(seg.path, {
+                    color: color,
+                    weight: 14,
+                    opacity: 0.88,
+                    lineCap: "round",   
+                    lineJoin: "round",
+                    smoothFactor: 1.5
+                }).bindPopup(`
+                    <b>Đoạn cảnh báo ô nhiễm</b><br>
+                    <b>Mức:</b> ${seg.pollutionText}<br>
+                    <b>WQI:</b> ${seg.wqi ? seg.wqi.toFixed(2) : "N/A"}<br>
+                    <b>Số đoạn gộp:</b> ${seg.length_segments}<br><br>
+                    <b>pH:</b> ${seg.values.ph ? seg.values.ph.toFixed(2) : "N/A"}<br>
+                    <b>DO:</b> ${seg.values.do ? seg.values.do.toFixed(2) : "N/A"}<br>
+                    <b>BOD5:</b> ${seg.values.bod5 ? seg.values.bod5.toFixed(2) : "N/A"}<br>
+                    <b>COD:</b> ${seg.values.cod ? seg.values.cod.toFixed(2) : "N/A"}<br>
+                    <b>NH4:</b> ${seg.values.nh4 ? seg.values.nh4.toFixed(2) : "N/A"}<br>
+                    <b>Coliform:</b> ${seg.values.coliform ? Math.round(seg.values.coliform) : "N/A"}
+                `);
+
+                lines.push(line);
+            });
+
+            combinedLayer = L.layerGroup(lines).addTo(map);
+            overlayLayers["Nội suy tổng hợp"] = combinedLayer;
+            updateLayerControl();
+        }
+
+        // Hàm cập nhật dữ liệu điểm (gửi lên server)
+        function updatePointsToServer(points) {
+            return fetch('http://localhost:3000/api/points/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ points: points.map(p => ({
+                    ma_diem: p.ma_diem,
+                    ph: p.ph,
+                    do: p.do,
+                    bod5: p.bod5,
+                    cod: p.cod,
+                    nh4: p.nh4,
+                    coliform: p.coliform,
+                    lat: p.geometry.coordinates[1],
+                    lng: p.geometry.coordinates[0]
+                })) })
+            });
+        }
+
+        // Quá trình biến động và lưu dữ liệu
+        function fluctuatePoints() {
+            if (!originalPointData.length) return;
+
+            console.log("Đang cập nhật dữ liệu...", new Date().toLocaleTimeString());
+
+            // 🔥 DATA LOGIC THỰC TẾ
+            let newPoints = applyRealisticRiverData(originalPointData);
+
+            currentPointData = newPoints;
+
+            // sắp theo dòng sông
+            currentPointData.sort((a, b) => {
+                return a.geometry.coordinates[0] - b.geometry.coordinates[0];
+            });
+
+            renderPoints();
+
+            updatePointsToServer(currentPointData)
+                .then(res => res.json())
+                .then(() => {
+                    if (riverDataCache) {
+                    let warnings = generateWarningsFromData(currentPointData);
+
+                    // 🔥 Gộp các warning gần nhau + cùng mức độ
+                    let mergedWarnings = mergeNearbyWarningsSameLevel(warnings, 0.0025);
+
+                    // giữ toàn bộ để hiển thị map không bị đứt
+                    mergedPollutionSegments = mergedWarnings;
+
+                    console.log("⚠ warnings tạo được:", warnings.length);
+                    console.log("🔥 warnings sau khi gộp:", mergedWarnings.length);
+
+                    // chỉ lọc khi lưu DB thôi
+                    let warningsToSave = mergedWarnings.filter(w => w.wqi >= 1.2);
+
+                    // 🔥 lưu đúng đoạn lớn
+                    saveWarningsToDB(warningsToSave);
+                    }
+                })
+                .catch(err => console.error('Lỗi gửi dữ liệu:', err));
+        }
+
+       function applyRealisticRiverData(points) {
+            let n = points.length;
+
+            return points.map((p, i) => {
+                let ratio = i / (n - 1);
+
+                // 3 vùng logic thực tế
+                let zone;
+                if (ratio < 0.25) zone = "upstream";       // đầu nguồn
+                else if (ratio < 0.75) zone = "urban";     // đô thị / KCN
+                else zone = "downstream";                  // hạ lưu
+
+                let values = {};
+
+                if (zone === "upstream") {
+                    values = {
+                        ph: 6.9 + Math.random()*0.3,              // 6.9 - 7.2
+                        do: 6.2 + Math.random()*1.0,              // 6.2 - 7.2
+                        bod5: 2.5 + Math.random()*2.0,            // 2.5 - 4.5
+                        cod: 8 + Math.random()*7,                 // 8 - 15
+                        nh4: 0.05 + Math.random()*0.12,           // 0.05 - 0.17
+                        coliform: 300 + Math.random()*700         // 300 - 1000
+                    };
+                } 
+                else if (zone === "urban") {
+                    values = {
+                        ph: 6.6 + Math.random()*0.5,              // 6.6 - 7.1
+                        do: 3.5 + Math.random()*2.0,              // 3.5 - 5.5
+                        bod5: 8 + Math.random()*10,               // 8 - 18
+                        cod: 20 + Math.random()*20,               // 20 - 40
+                        nh4: 0.25 + Math.random()*0.45,           // 0.25 - 0.7
+                        coliform: 2500 + Math.random()*5000       // 2500 - 7500
+                    };
+                } 
+                else {
+                    values = {
+                        ph: 6.7 + Math.random()*0.4,              // 6.7 - 7.1
+                        do: 4.5 + Math.random()*1.5,              // 4.5 - 6
+                        bod5: 5 + Math.random()*7,                // 5 - 12
+                        cod: 15 + Math.random()*15,               // 15 - 30
+                        nh4: 0.15 + Math.random()*0.25,           // 0.15 - 0.4
+                        coliform: 1200 + Math.random()*2500       // 1200 - 3700
+                    };
+                }
+
+                return {
+                    ...p,
+                    ph: Number(values.ph.toFixed(2)),
+                    do: Number(values.do.toFixed(2)),
+                    bod5: Number(values.bod5.toFixed(2)),
+                    cod: Number(values.cod.toFixed(2)),
+                    nh4: Number(values.nh4.toFixed(2)),
+                    coliform: Math.round(values.coliform)
+                };
+            });
+        }
+
+        // ==================== NỘI SUY TỔNG HỢP (TRUNG BÌNH) ====================
+        function generateCombinedAverage() {
+            Object.keys(overlayLayers).forEach(key => {
+                if (key.includes("Nội suy")) {
+                    if (overlayLayers[key] && map.hasLayer(overlayLayers[key])) {
+                        map.removeLayer(overlayLayers[key]);
+                    }
+                    delete overlayLayers[key];
+                }
+            });
+
+            if (combinedLayer && map.hasLayer(combinedLayer)) {
+                map.removeLayer(combinedLayer);
+                combinedLayer = null;
+            }
+
+            if (!riverDataCache) {
+                alert("Chưa load dữ liệu sông! Nhấn 'Dòng chảy sông' trước.");
+                return;
+            }
+
+            // 🔥 Tạo warning cho toàn bộ sông
+            let rawWarnings = generateWarningsFromData(currentPointData);
+
+            // 🔥 Gộp đoạn gần nhau + cùng màu
+            mergedPollutionSegments = mergeNearbyWarningsSameLevel(rawWarnings, 0.0025);
+
+            console.log("🧩 Raw segments:", rawWarnings.length);
+            console.log("🔥 Merged segments:", mergedPollutionSegments.length);
+
+            drawMergedPollutionSegments(mergedPollutionSegments);
+            updateLegend("combined");
+        }
+
+        function generateInterpolationForSegment(bounds) {
+            Object.keys(overlayLayers).forEach(key => {
+                if (key.includes("Nội suy")) {
+                    if (overlayLayers[key] && map.hasLayer(overlayLayers[key])) {
+                        map.removeLayer(overlayLayers[key]);
+                    }
+                    delete overlayLayers[key];
+                }
+            });
+
+            if (combinedLayer && map.hasLayer(combinedLayer)) {
+                map.removeLayer(combinedLayer);
+                combinedLayer = null;
+            }
+
+            if (!riverDataCache) return;
+
+            // Tạo warning cho toàn bộ sông
+            let rawWarnings = generateWarningsFromData(currentPointData);
+
+            // Lọc các cảnh báo có location nằm trong bounds
+            let filteredWarnings = rawWarnings.filter(w => {
+                if (!w.location) return false;
+                let lat = w.location.lat;
+                let lng = w.location.lng;
+                return lat >= bounds.getSouth() && lat <= bounds.getNorth() &&
+                    lng >= bounds.getWest() && lng <= bounds.getEast();
+            });
+
+            // Gộp đoạn gần nhau + cùng màu
+            let mergedWarnings = mergeNearbyWarningsSameLevel(filteredWarnings, 0.0025);
+            drawMergedPollutionSegments(mergedWarnings);
+            updateLegend("combined");
+        }
+
+        function generateSingleInterpolation(type) {
+            Object.keys(overlayLayers).forEach(key => {
+                if (key.includes("Nội suy")) {
+                    if (overlayLayers[key] && map.hasLayer(overlayLayers[key])) {
+                        map.removeLayer(overlayLayers[key]);
+                    }
+                    delete overlayLayers[key];
+                }
+            });
+
+            if (combinedLayer && map.hasLayer(combinedLayer)) {
+                map.removeLayer(combinedLayer);
+                combinedLayer = null;
+            }
+
+            if (!riverDataCache) {
+                alert("Chưa load dữ liệu sông!");
+                return;
+            }
+
+            let pointsMap = {
+                ph: currentPointData.map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.ph })),
+                do: currentPointData.map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.do })),
+                bod5: currentPointData.map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.bod5 })),
+                cod: currentPointData.map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.cod })),
+                nh4: currentPointData.map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.nh4 })),
+                coliform: currentPointData.map(p => ({ lat: p.geometry.coordinates[1], lng: p.geometry.coordinates[0], val: p.coliform }))
+            };
+
+            let points = pointsMap[type];
+            if (!points || points.length === 0) {
+                console.warn("Không có dữ liệu:", type);
+                return;
+            }
+
+            let lines = [];
+
+            riverDataCache.features.forEach(feature => {
+                let coords = feature.geometry.type === "LineString"
+                    ? feature.geometry.coordinates
+                    : feature.geometry.coordinates.flat();
+
+                coords = coords.filter((c, i, arr) =>
+                    i === 0 || !(c[0] === arr[i - 1][0] && c[1] === arr[i - 1][1])
+                );
+
+                for (let i = 0; i < coords.length - 1; i++) {
+                    let p1 = coords[i], p2 = coords[i + 1];
+
+                    let cx = (p1[1] + p2[1]) / 2;
+                    let cy = (p1[0] + p2[0]) / 2;
+
+                    let rawVal = idwValue(points, cx, cy);
+                    if (rawVal == null) continue;
+
+                    let level = normalizeIndicator(type, rawVal);
+                    let color = getPollutionColor(level);
+
+                    let segment = L.polyline([[p1[1], p1[0]], [p2[1], p2[0]]], {
+                        color: color,
+                        weight: 10,
+                        opacity: 0.9,
+                        lineCap: "round",
+                        lineJoin: "round"
+                    }).bindPopup(`
+                        <b>Nội suy ${type.toUpperCase()}</b><br>
+                        Giá trị: <b>${type === "coliform" ? Math.round(rawVal) : rawVal.toFixed(2)}</b><br>
+                        Mức đánh giá: <b>${level.toFixed(2)}</b>
+                    `);
+
+                    lines.push(segment);
+                }
+            });
+
+            let layer = L.layerGroup(lines).addTo(map);
+            overlayLayers["Nội suy " + type.toUpperCase()] = layer;
+
+            updateLayerControl();
+            updateLegend(type);
+        }
+
+        // ==================== QUẢN LÝ LỚP ====================
+        function updateLayerControl() {
+            if (window.layerControl) map.removeControl(window.layerControl);
+            window.layerControl = L.control.layers(baseMaps, overlayLayers, { collapsed: false }).addTo(map);
+        }
+
+        // ==================== XỬ LÝ NÚT BẤM ====================
+        document.addEventListener('click', function(e) {
+            if (e.target.id === 'btnCombinedInterp') {
+                if (!riverDataCache) {
+                    alert('Chưa có dữ liệu sông. Nhấn "Dòng chảy sông" trước.');
+                    return;
+                }
+                generateCombinedAverage();
+            }
+            else if (e.target.id === 'btnFlow') createRiverFlow();
+            else if (e.target.id === 'btnOff') {
+                // Xoá lớp tổng hợp
+                if (combinedLayer && map.hasLayer(combinedLayer)) {
+                    map.removeLayer(combinedLayer);
+                    combinedLayer = null;
+                }
+
+                // Xoá dòng chảy
+                if (flowLayer && map.hasLayer(flowLayer)) {
+                    map.removeLayer(flowLayer);
+                    flowLayer = null;
+                }
+
+                // Xoá toàn bộ lớp nội suy đơn
+                Object.keys(overlayLayers).forEach(key => {
+                    if (key.includes("Nội suy") || key === "Dòng chảy sông") {
+                        if (overlayLayers[key] && map.hasLayer(overlayLayers[key])) {
+                            map.removeLayer(overlayLayers[key]);
+                        }
+                        delete overlayLayers[key];
+                    }
+                });
+
+                updateLayerControl();
+                updateLegend("combined");
+            }
+        });
+
+         // ==================== KHỞI TẠO DỮ LIỆU ĐIỂM ====================
+        function defaultColiform(maDiem) {
+            let sum = 0;
+            for (let i = 0; i < maDiem.length; i++) sum += maDiem.charCodeAt(i);
+            return Math.max(1, (sum % 1000) + 100);
+        }
+
+        // Luôn tải dữ liệu sông để có riverDataCache
+        createRiverFlow();
+
+        fetch("/api/points/")
+            .then(res => res.json())
+            .then(data => {
+                originalPointData = data.map(p => ({
+                    ...p,
+                    coliform: p.coliform !== undefined && p.coliform !== null ? p.coliform : defaultColiform(p.ma_diem)
+                }));
+                currentPointData = applyRealisticRiverData(originalPointData);
+                renderPoints();
+                updateLegend("combined");
+                // Bắt đầu interval cập nhật mỗi 60 giây
+                setInterval(fluctuatePoints, 60000);
+                console.log("✅ Đã thiết lập tự động cập nhật dữ liệu mỗi 60 giây.");
+
+            })
+            .catch(err => console.error("Lỗi tải điểm:", err));
+
+        // ==================== VẼ RANH GIỚI ====================
+        fetch("/static/data/tphcm_boundary_geo.json")
+            .then(res => res.json())
+            .then(data => {
+                boundaryLayer = L.geoJSON(data, { style: { color: "red", weight: 2, fillOpacity: 0 } }).addTo(map);
+                overlayLayers["Ranh giới"] = boundaryLayer;
+                updateLayerControl();
+            }).catch(err => console.error("Lỗi ranh giới:", err));
+
+
+        window.generateSingleInterpolation = generateSingleInterpolation;
+        window.generateCombinedAverage = generateCombinedAverage;
+    });
+</script>
+{% endblock %}

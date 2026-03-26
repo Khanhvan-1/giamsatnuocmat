@@ -1,0 +1,235 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const pool = require('./db');
+
+const app = express();
+const port = 3000;
+
+app.use(cors());
+app.use(bodyParser.json({ limit: '20mb' }));
+app.use(bodyParser.urlencoded({ limit: '20mb', extended: true }));
+
+/* =========================================================
+   1) CẬP NHẬT DỮ LIỆU ĐIỂM QUAN TRẮC
+========================================================= */
+app.post('/api/points/update', async (req, res) => {
+  const points = req.body.points;
+
+  if (!points || !Array.isArray(points)) {
+    return res.status(400).json({ error: 'Invalid data' });
+  }
+
+  try {
+    await pool.query('BEGIN');
+
+    for (const p of points) {
+      const { ma_diem, ph, do: doVal, bod5, cod, nh4, coliform, lat, lng } = p;
+      const geom = `POINT(${lng} ${lat})`;
+
+      const query = `
+        UPDATE diem_quan_trac_clean
+        SET ph = $1,
+            "do" = $2,
+            bod5 = $3,
+            cod = $4,
+            nh4 = $5,
+            caliform = $6,
+            geom = ST_GeomFromText($7, 4326)
+        WHERE ma_diem = $8
+      `;
+
+      const values = [ph, doVal, bod5, cod, nh4, coliform, geom, ma_diem];
+      await pool.query(query, values);
+    }
+
+    await pool.query('COMMIT');
+    res.json({ status: 'success', count: points.length });
+
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    console.error('❌ Lỗi update points:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* =========================================================
+   2) LẤY DỮ LIỆU ĐIỂM QUAN TRẮC
+========================================================= */
+app.get('/api/points', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT ma_diem, ph, "do", bod5, cod, nh4,
+             caliform as coliform,
+             ST_AsGeoJSON(geom) as geometry
+      FROM diem_quan_trac_clean
+    `);
+
+    const features = result.rows.map(row => ({
+      ma_diem: row.ma_diem,
+      ph: row.ph,
+      do: row.do,
+      bod5: row.bod5,
+      cod: row.cod,
+      nh4: row.nh4,
+      coliform: row.coliform,
+      geometry: JSON.parse(row.geometry)
+    }));
+
+    res.json(features);
+
+  } catch (err) {
+    console.error('❌ Lỗi lấy points:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/points/', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT ma_diem, ph, "do", bod5, cod, nh4,
+             caliform as coliform,
+             ST_AsGeoJSON(geom) as geometry
+      FROM diem_quan_trac_clean
+    `);
+
+    const features = result.rows.map(row => ({
+      ma_diem: row.ma_diem,
+      ph: row.ph,
+      do: row.do,
+      bod5: row.bod5,
+      cod: row.cod,
+      nh4: row.nh4,
+      coliform: row.coliform,
+      geometry: JSON.parse(row.geometry)
+    }));
+
+    res.json(features);
+
+  } catch (err) {
+    console.error('❌ Lỗi lấy points:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* =========================================================
+   3) LƯU CẢNH BÁO Ô NHIỄM
+========================================================= */
+app.post('/api/reports', async (req, res) => {
+  const warnings = req.body.warnings;
+
+  console.log("📥 Nhận warnings từ frontend:", JSON.stringify(warnings, null, 2));
+
+  if (!warnings || !Array.isArray(warnings)) {
+    return res.status(400).json({ error: 'Dữ liệu không hợp lệ' });
+  }
+
+  try {
+    for (let w of warnings) {
+      const segmentName =
+        w.segment_name ||
+        w.segment_id ||
+        (w.location ? `(${w.location.lat}, ${w.location.lng})` : 'Không tên');
+
+      const ph = w.values?.ph ?? null;
+      const doVal = w.values?.do ?? null;
+      const bod5 = w.values?.bod5 ?? null;
+      const cod = w.values?.cod ?? null;
+      const nh4 = w.values?.nh4 ?? null;
+      const coliform = w.values?.coliform ?? null;
+
+      let pollutedCount = 0;
+      if (ph !== null && (ph < 6 || ph > 8.5)) pollutedCount++;
+      if (doVal !== null && doVal < 4) pollutedCount++;
+      if (bod5 !== null && bod5 > 12) pollutedCount++;
+      if (cod !== null && cod > 30) pollutedCount++;
+      if (nh4 !== null && nh4 > 0.5) pollutedCount++;
+      if (coliform !== null && coliform > 5000) pollutedCount++;
+
+      await pool.query(
+        `INSERT INTO warnings (segment_name, ph, do_val, bod5, cod, nh4, coliform, polluted_count)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [segmentName, ph, doVal, bod5, cod, nh4, coliform, pollutedCount]
+      );
+    }
+
+    res.json({ success: true, count: warnings.length });
+
+  } catch (err) {
+    console.error('❌ Lỗi lưu cảnh báo:', err);
+    res.status(500).json({ error: 'Lỗi server', detail: err.message });
+  }
+});
+
+/* =========================================================
+   4) ROUTE PHỤ CHO FRONTEND CŨ
+========================================================= */
+app.post('/api/warnings/save', async (req, res) => {
+  const warnings = req.body.warnings;
+
+  console.log("📥 Nhận warnings từ frontend (route cũ):", JSON.stringify(warnings, null, 2));
+
+  if (!warnings || !Array.isArray(warnings)) {
+    return res.status(400).json({ error: 'Dữ liệu không hợp lệ' });
+  }
+
+  try {
+    for (let w of warnings) {
+      const segmentName =
+        w.segment_name ||
+        w.segment_id ||
+        (w.location ? `(${w.location.lat}, ${w.location.lng})` : 'Không tên');
+
+      const ph = w.values?.ph ?? null;
+      const doVal = w.values?.do ?? null;
+      const bod5 = w.values?.bod5 ?? null;
+      const cod = w.values?.cod ?? null;
+      const nh4 = w.values?.nh4 ?? null;
+      const coliform = w.values?.coliform ?? null;
+
+      let pollutedCount = 0;
+      if (ph !== null && (ph < 6 || ph > 8.5)) pollutedCount++;
+      if (doVal !== null && doVal < 4) pollutedCount++;
+      if (bod5 !== null && bod5 > 12) pollutedCount++;
+      if (cod !== null && cod > 30) pollutedCount++;
+      if (nh4 !== null && nh4 > 0.5) pollutedCount++;
+      if (coliform !== null && coliform > 5000) pollutedCount++;
+
+      await pool.query(
+        `INSERT INTO warnings (segment_name, ph, do_val, bod5, cod, nh4, coliform, polluted_count)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [segmentName, ph, doVal, bod5, cod, nh4, coliform, pollutedCount]
+      );
+    }
+
+    res.json({ success: true, count: warnings.length });
+
+  } catch (err) {
+    console.error('❌ Lỗi lưu cảnh báo route cũ:', err);
+    res.status(500).json({ error: 'Lỗi server', detail: err.message });
+  }
+});
+
+/* =========================================================
+   5) LẤY DANH SÁCH CẢNH BÁO MỚI NHẤT
+========================================================= */
+app.get('/api/reports/latest', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, segment_name, ph, do_val, bod5, cod, nh4, coliform, polluted_count, report_date
+      FROM warnings
+      ORDER BY report_date DESC
+      LIMIT 100
+    `);
+
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error('❌ Lỗi lấy warnings:', err);
+    res.status(500).json({ error: 'Lỗi server' });
+  }
+});
+
+app.listen(port, () => {
+  console.log(`✅ Server running at http://localhost:${port}`);
+});
