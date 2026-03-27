@@ -665,6 +665,7 @@
     let warnings = [];  
     let warningSegments = [];
 
+    // Mở rộng danh sách nguồn ô nhiễm không gian (có thể thêm nếu cần)
     const spatialPollutionSources = [
         { name: "Khu công nghiệp phía Bắc", type: "industrial", lat: 11.0205, lng: 106.6150, radius: 0.015, description: "khu công nghiệp / cụm công nghiệp" },
         { name: "Cụm dân cư ven sông trung tâm", type: "residential", lat: 10.9950, lng: 106.6400, radius: 0.018, description: "khu dân cư ven sông" },
@@ -682,6 +683,7 @@
         coliform: { max: 5000, name: "Coliform" }
     };
 
+    // ========== TIỆN ÍCH ==========
     function randomInRange(min, max, decimals = 2) {
         return Number((Math.random() * (max - min) + min).toFixed(decimals));
     }
@@ -726,33 +728,20 @@
         return `${issuesText}${pollutionText}${reasonsText}${spatialText}${sourceText}${commentaryText}${recommendationText}`.trim();
     }
 
-    // Hàm mở trang map.html với tọa độ đoạn sông
+    // Hàm zoom bản đồ khi click vào cảnh báo
     function zoomToSegment(segment) {
-        if (!segment || !segment.startLat || !segment.startLng || !segment.endLat || !segment.endLng) {
-            console.warn("Không có đủ tọa độ để zoom");
-            return;
+        if (!miniMap) return;
+        if (segment.startLat && segment.startLng && segment.endLat && segment.endLng) {
+            const bounds = L.latLngBounds(
+                [segment.startLat, segment.startLng],
+                [segment.endLat, segment.endLng]
+            );
+            miniMap.fitBounds(bounds, { padding: [30, 30] });
+        } else if (segment.coords && segment.coords.length > 0) {
+            const latLngs = segment.coords.map(c => [c.lat, c.lng]);
+            const bounds = L.latLngBounds(latLngs);
+            miniMap.fitBounds(bounds, { padding: [30, 30] });
         }
-        var lat1 = segment.startLat;
-        var lng1 = segment.startLng;
-        var lat2 = segment.endLat;
-        var lng2 = segment.endLng;
-        var minLat = Math.min(lat1, lat2);
-        var maxLat = Math.max(lat1, lat2);
-        var minLng = Math.min(lng1, lng2);
-        var maxLng = Math.max(lng1, lng2);
-        var bounds = `${minLat},${minLng},${maxLat},${maxLng}`;
-        var centerLat = (lat1 + lat2) / 2;
-        var centerLng = (lng1 + lng2) / 2;
-        
-        // Tạo chuỗi coords từ segment.coords (mảng các cặp [lat, lng])
-        var coordsStr = "";
-        if (segment.coords && segment.coords.length > 0) {
-            coordsStr = segment.coords.map(p => `${p[0]},${p[1]}`).join(";");
-        } else {
-            coordsStr = `${lat1},${lng1};${lat2},${lng2}`;
-        }
-        
-        window.open(`/map/?center=${centerLat},${centerLng}&bounds=${bounds}&coords=${coordsStr}`, '_blank');
     }
 
     function renderWarningCards(data) {
@@ -783,7 +772,7 @@
         warningList.innerHTML = visibleData.map(seg => {
             const p = (seg.priority || "Trung bình").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             const dangerIcon = p.includes("rat cao") ? "🚨" : (p.includes("cao") ? "⚠️" : "📍");
-            // Escape để truyền object vào onclick
+            // Escape JSON để truyền vào onclick
             const segJson = JSON.stringify(seg).replace(/"/g, '&quot;');
             return `
                 <div class="warning-block ${getPriorityColorClass(seg.priority)}" onclick="zoomToSegment(${segJson})" style="cursor:pointer;">
@@ -933,10 +922,14 @@
         return found.filter((v, i, arr) => arr.findIndex(x => x.name === v.name) === i);
     }
 
+    // Hàm suy luận loại hình sử dụng đất dựa trên tọa độ (khi không có nguồn cố định)
     function inferLandUseByCoordinates(coords) {
         if (!coords || coords.length === 0) return [];
+        // Tính tọa độ trung bình
         let avgLat = coords.reduce((s, c) => s + c.lat, 0) / coords.length;
         let avgLng = coords.reduce((s, c) => s + c.lng, 0) / coords.length;
+
+        // Phân vùng theo vĩ độ (dựa trên đặc điểm TP.HCM)
         if (avgLat > 10.99) return [{ type: "industrial", name: "Khu vực công nghiệp phía Bắc", description: "gần khu công nghiệp, cơ sở sản xuất" }];
         if (avgLat < 10.94) return [{ type: "agriculture", name: "Vùng nông nghiệp / chăn nuôi", description: "khu vực nông nghiệp, chăn nuôi" }];
         return [{ type: "residential", name: "Khu dân cư ven sông", description: "khu dân cư, nước thải sinh hoạt" }];
@@ -953,6 +946,7 @@
         return [...new Set(desc)];
     }
 
+    // Hàm gộp thứ cấp các nhóm cảnh báo gần nhau
     function mergeAdjacentGroups(groups) {
         if (groups.length < 2) return groups;
         let merged = [];
@@ -1034,6 +1028,7 @@
             const issueKeys = Object.keys(group.issueMap);
             const pollutionReasons = getPollutionReasons(issueKeys);
             let nearbySpatial = getNearbySpatialSources(group.allCoords);
+            // Nếu không có nguồn cố định, suy luận từ tọa độ
             if (nearbySpatial.length === 0) {
                 nearbySpatial = inferLandUseByCoordinates(group.allCoords);
             }
@@ -1058,6 +1053,7 @@
         renderWarningCards(warningSegments);
     }
 
+    // Hàm sinh nhận xét tự động cho báo cáo HTML
     function generateAutoCommentary() {
         if (!warningSegments || warningSegments.length === 0) {
             return `<p>Hiện tại hệ thống chưa ghi nhận đoạn sông nào có dấu hiệu ô nhiễm vượt ngưỡng đáng kể. Chất lượng nước nhìn chung đang ở trạng thái ổn định.</p>`;
@@ -1102,13 +1098,13 @@
             .priority-rat-cao { background-color: #ff4d4d; color: white; font-weight: bold; }
             .priority-cao { background-color: #ffa64d; color: white; font-weight: bold; }
             .priority-trung-binh { background-color: #f2f2f2; color: black; }
-        </style></head><body><h1>BÁO CÁO CẢNH BÁO Ô NHIỄM VÙNG SÔNG</h1><p><i>Thời gian xuất: ${new Date().toLocaleString()}</i></p><h2>1. Danh sách cảnh báo ô nhiễm</h2>${generateAutoCommentary()} 表格<thead> Haye<th>Vị trí</th><th>Các chỉ tiêu vượt ngưỡng</th><th>Loại ô nhiễm nghi ngờ</th><th>Nguyên nhân ô nhiễm có thể</th><th>Nhận xét tự động</th><th>Nguồn tác động nghi ngờ</th><th>Ngữ cảnh không gian gần</th><th>Khuyến nghị</th><th>Mức ưu tiên</th></thead><tbody>${warningSegments.map(seg => {
+        </style></head><body><h1>BÁO CÁO CẢNH BÁO Ô NHIỄM VÙNG SÔNG</h1><p><i>Thời gian xuất: ${new Date().toLocaleString()}</i></p><h2>1. Danh sách cảnh báo ô nhiễm</h2>${generateAutoCommentary()} <table><thead><tr><th>Vị trí</th><th>Các chỉ tiêu vượt ngưỡng</th><th>Loại ô nhiễm nghi ngờ</th><th>Nguyên nhân ô nhiễm có thể</th><th>Nhận xét tự động</th><th>Nguồn tác động nghi ngờ</th><th>Ngữ cảnh không gian gần</th><th>Khuyến nghị</th><th>Mức ưu tiên</th></tr></thead><tbody>${warningSegments.map(seg => {
             let priorityClass = '';
             if (seg.priority === 'Rất cao') priorityClass = 'priority-rat-cao';
             else if (seg.priority === 'Cao') priorityClass = 'priority-cao';
             else priorityClass = 'priority-trung-binh';
-            return `<tr class="${priorityClass}">\n<td>${seg.location}</td>\n<td>${seg.issues.join("; ")}</td>\n<td>${seg.pollutionType ? seg.pollutionType.join("; ") : ""}</td>\n<td>${seg.reasons ? seg.reasons.join("; ") : ""}</td>\n<td>${seg.commentary || ""}</td>\n<td>${seg.suspectedSources && seg.suspectedSources.length ? seg.suspectedSources.join("; ") : "Chưa xác định rõ"}</td>\n<td>${seg.spatialSources && seg.spatialSources.length ? seg.spatialSources.join("; ") : "Không phát hiện nguồn tác động gần"}</td>\n<td>${seg.recommendations && seg.recommendations.length ? seg.recommendations.join("; ") : "Tiếp tục theo dõi định kỳ"}</td>\n<td><b>${seg.priority || "Trung bình"}</b></td>\n</tr>`;
-        }).join('')}</tbody> 表格</body></html>`;
+            return `<tr class="${priorityClass}"><td>${seg.location}</td><td>${seg.issues.join("; ")}</td><td>${seg.pollutionType ? seg.pollutionType.join("; ") : ""}</td><td>${seg.reasons ? seg.reasons.join("; ") : ""}</td><td>${seg.commentary || ""}</td><td>${seg.suspectedSources && seg.suspectedSources.length ? seg.suspectedSources.join("; ") : "Chưa xác định rõ"}</td><td>${seg.spatialSources && seg.spatialSources.length ? seg.spatialSources.join("; ") : "Không phát hiện nguồn tác động gần"}</td><td>${seg.recommendations && seg.recommendations.length ? seg.recommendations.join("; ") : "Tiếp tục theo dõi định kỳ"}</td><td><b>${seg.priority || "Trung bình"}</b></td></tr>`;
+        }).join('')}</tbody></table></body></html>`;
         const blob = new Blob([htmlContent], { type: "application/vnd.ms-excel" });
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
@@ -1140,13 +1136,13 @@
             .priority-rat-cao { background-color: #ff4d4d; color: white; font-weight: bold; }
             .priority-cao { background-color: #ffa64d; color: white; font-weight: bold; }
             .priority-trung-binh { background-color: #f2f2f2; color: black; }
-        </style></head><body><h1>BÁO CÁO CẢNH BÁO Ô NHIỄM VÙNG SÔNG</h1><p><i>Thời gian xuất: ${new Date().toLocaleString()}</i></p><h2>1. Danh sách cảnh báo</h2>${generateAutoCommentary()} 表格<thead> Haye<th>Vị trí</th><th>Các chỉ tiêu vượt ngưỡng</th><th>Loại ô nhiễm nghi ngờ</th><th>Nguyên nhân ô nhiễm có thể</th><th>Nhận xét tự động</th><th>Nguồn tác động nghi ngờ</th><th>Ngữ cảnh không gian gần</th><th>Khuyến nghị</th><th>Mức ưu tiên</th></thead><tbody>${warningSegments.map(seg => {
+        </style></head><body><h1>BÁO CÁO CẢNH BÁO Ô NHIỄM VÙNG SÔNG</h1><p><i>Thời gian xuất: ${new Date().toLocaleString()}</i></p><h2>1. Danh sách cảnh báo</h2>${generateAutoCommentary()} <table><thead><tr><th>Vị trí</th><th>Các chỉ tiêu vượt ngưỡng</th><th>Loại ô nhiễm nghi ngờ</th><th>Nguyên nhân ô nhiễm có thể</th><th>Nhận xét tự động</th><th>Nguồn tác động nghi ngờ</th><th>Ngữ cảnh không gian gần</th><th>Khuyến nghị</th><th>Mức ưu tiên</th></tr></thead><tbody>${warningSegments.map(seg => {
             let priorityClass = '';
             if (seg.priority === 'Rất cao') priorityClass = 'priority-rat-cao';
             else if (seg.priority === 'Cao') priorityClass = 'priority-cao';
             else priorityClass = 'priority-trung-binh';
-            return `<tr class="${priorityClass}">\n<td>${seg.location}</td>\n<td>${seg.issues.join("; ")}</td>\n<td>${seg.pollutionType ? seg.pollutionType.join("; ") : ""}</td>\n<td>${seg.reasons ? seg.reasons.join("; ") : ""}</td>\n<td>${seg.commentary || ""}</td>\n<td>${seg.suspectedSources && seg.suspectedSources.length ? seg.suspectedSources.join("; ") : "Chưa xác định rõ"}</td>\n<td>${seg.spatialSources && seg.spatialSources.length ? seg.spatialSources.join("; ") : "Không phát hiện nguồn tác động gần"}</td>\n<td>${seg.recommendations && seg.recommendations.length ? seg.recommendations.join("; ") : "Tiếp tục theo dõi định kỳ"}</td>\n<td><b>${seg.priority || "Trung bình"}</b></td>\n</tr>`;
-        }).join('')}</tbody> 表格<h2>2. Biểu đồ quan trắc</h2><div class="chart-box"><h3>Biểu đồ pH</h3><img src="${chartPH}"></div><div class="chart-box"><h3>Biểu đồ DO</h3><img src="${chartDO}"></div><div class="chart-box"><h3>Biểu đồ BOD5</h3><img src="${chartBOD}"></div><div class="chart-box"><h3>Biểu đồ COD</h3><img src="${chartCOD}"></div><div class="chart-box"><h3>Biểu đồ NH4</h3><img src="${chartNH4}"></div><div class="chart-box"><h3>Biểu đồ Coliform</h3><img src="${chartColiform}"></div></body></html>`;
+            return `<tr class="${priorityClass}"><td>${seg.location}</td><td>${seg.issues.join("; ")}</td><td>${seg.pollutionType ? seg.pollutionType.join("; ") : ""}</td><td>${seg.reasons ? seg.reasons.join("; ") : ""}</td><td>${seg.commentary || ""}</td><td>${seg.suspectedSources && seg.suspectedSources.length ? seg.suspectedSources.join("; ") : "Chưa xác định rõ"}</td><td>${seg.spatialSources && seg.spatialSources.length ? seg.spatialSources.join("; ") : "Không phát hiện nguồn tác động gần"}</td><td>${seg.recommendations && seg.recommendations.length ? seg.recommendations.join("; ") : "Tiếp tục theo dõi định kỳ"}</td><td><b>${seg.priority || "Trung bình"}</b></td></tr>`;
+        }).join('')}</tbody></table><h2>2. Biểu đồ quan trắc</h2><div class="chart-box"><h3>Biểu đồ pH</h3><img src="${chartPH}"></div><div class="chart-box"><h3>Biểu đồ DO</h3><img src="${chartDO}"></div><div class="chart-box"><h3>Biểu đồ BOD5</h3><img src="${chartBOD}"></div><div class="chart-box"><h3>Biểu đồ COD</h3><img src="${chartCOD}"></div><div class="chart-box"><h3>Biểu đồ NH4</h3><img src="${chartNH4}"></div><div class="chart-box"><h3>Biểu đồ Coliform</h3><img src="${chartColiform}"></div></body></html>`;
         const blob = new Blob([htmlContent], { type: "text/html" });
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
