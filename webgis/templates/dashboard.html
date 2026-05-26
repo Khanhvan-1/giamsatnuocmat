@@ -121,7 +121,47 @@
 </div>
 
 <h3> Trung bình tổng hợp</h3>
-<div class="card" id="avgTable"></div>
+    <div class="card" id="avgTable"></div>
+
+<!-- Nút mở chat -->
+<button id="chatToggleBtn" onclick="toggleChat()">
+    🤖
+</button>
+
+<!-- Chatbox -->
+<div id="chatbox" class="hidden">
+
+    <div id="chatHistoryPanel">
+        <h3>Lịch sử chat</h3>
+        <div id="historyList"></div>
+    </div>
+
+    <div id="chatHeader">
+        <span>🤖 AI Water Assistant</span>
+
+        <button id="closeChatBtn" onclick="toggleChat()">
+            ✕
+        </button>
+    </div>
+
+    <div id="chatMessages">
+        <div class="bot-msg">
+            Xin chào 👋
+        </div>
+    </div>
+
+    <div id="chatInputBox">
+        <input
+            type="text"
+            id="chatInput"
+            placeholder="Nhập câu hỏi..."
+            onkeypress="if(event.key==='Enter') sendMessage()"
+        >
+        <button onclick="sendMessage()">Gửi</button>
+    </div>
+
+</div>
+<div class="chat-body" id="chatMessages"></div>
 
 <style>
 
@@ -649,6 +689,140 @@
         font-size: 18px;
     }
 
+    #chatToggleBtn{
+        position: fixed;
+        bottom: 25px;
+        right: 25px;
+        width: 65px;
+        height: 65px;
+        border-radius: 50%;
+        border:none;
+        background:#2563eb;
+        color:white;
+        font-size:28px;
+        cursor:pointer;
+        z-index:9999;
+        box-shadow:0 8px 20px rgba(0,0,0,0.25);
+    }
+
+    #chatbox{
+        position: fixed;
+        bottom: 100px;
+        right: 25px;
+        width: 350px;
+        height: 480px;
+        background:white;
+        border-radius:20px;
+        box-shadow:0 15px 40px rgba(0,0,0,0.25);
+        z-index:9999;
+        display:flex;
+        flex-direction:column;
+        overflow:hidden;
+    }
+
+    .hidden{
+        display:none !important;
+    }
+
+    #chatHeader{
+        background:linear-gradient(135deg,#2563eb,#1d4ed8);
+        color:white;
+        padding:16px;
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        font-weight:700;
+    }
+
+    #closeChatBtn{
+        background:none;
+        border:none;
+        color:white;
+        font-size:20px;
+        cursor:pointer;
+    }
+
+    #chatMessages{
+        flex:1;
+        padding:15px;
+        overflow-y:auto;
+        background:#f8fafc;
+    }
+
+    .user-msg{
+        background:#dbeafe;
+        padding:12px;
+        border-radius:14px;
+        margin-bottom:10px;
+        text-align:right;
+    }
+
+    .bot-msg{
+        background:white;
+        padding:12px;
+        border-radius:14px;
+        margin-bottom:10px;
+        border:1px solid #ddd;
+    }
+
+    #chatInputBox{
+        display:flex;
+        border-top:1px solid #ddd;
+    }
+
+    #chatInput{
+        flex:1;
+        border:none;
+        padding:14px;
+        outline:none;
+    }
+
+    #chatInputBox button{
+        border:none;
+        background:#2563eb;
+        color:white;
+        padding:0 20px;
+        cursor:pointer;
+    }
+
+    .user-message{
+        background:#dce8ff;
+        padding:12px;
+        border-radius:15px;
+        margin:10px;
+        text-align:right;
+    }
+
+    .bot-message{
+        background:white;
+        padding:12px;
+        border-radius:15px;
+        margin:10px;
+        border:1px solid #ddd;
+    }
+
+    #chatHistoryPanel{
+        width:220px;
+        height:400px;
+        background:white;
+        border:1px solid #ddd;
+        border-radius:10px;
+        padding:10px;
+        overflow-y:auto;
+    }
+
+    .history-item{
+        padding:8px;
+        margin-bottom:8px;
+        background:#f5f5f5;
+        border-radius:8px;
+        cursor:pointer;
+        font-size:14px;
+    }
+
+    .history-item:hover{
+        background:#e8e8e8;
+    }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -1253,6 +1427,106 @@
         if (toggleBtn) toggleBtn.addEventListener("click", () => { warningExpanded = true; renderWarningCards(warningSegments); });
         if (collapseBtn) collapseBtn.addEventListener("click", () => { warningExpanded = false; renderWarningCards(warningSegments); });
     });
+
+
+    async function sendMessage() {
+        const input = document.getElementById("chatInput");
+        const message = input.value.trim();
+
+        if (!message) return;
+
+        const chatBox = document.getElementById("chatMessages");
+
+        // hiện tin nhắn user ngay
+        chatBox.innerHTML += `
+            <div class="user-message">
+                ${message}
+            </div>
+        `;
+
+        // xoá ô input
+        input.value = "";
+
+        // kéo xuống cuối
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        try {
+            // lấy dữ liệu điểm quan trắc trước
+            const pointsResponse = await fetch("/api/points/");
+            const pointsData = await pointsResponse.json();
+
+            // gửi qua chatbot
+            const response = await fetch("/api/chatbot/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    message: message,
+                    data: pointsData
+                })
+            });
+
+            const result = await response.json();
+
+            // hiện câu trả lời bot
+            chatBox.innerHTML += `
+                <div class="bot-message">
+                    ${result.reply}
+                </div>
+            `;
+
+            // kéo xuống cuối
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+        } catch (error) {
+            console.log("Lỗi:", error);
+
+            chatBox.innerHTML += `
+                <div class="bot-message">
+                    Lỗi kết nối chatbot.
+                </div>
+            `;
+        }
+    }
+
+    function toggleChat(){
+        const box = document.getElementById("chatbox");
+        box.classList.toggle("hidden");
+    }
+
+    async function loadChatHistory() {
+        try {
+            const response = await fetch("/api/chat-history/");
+            const history = await response.json();
+
+            const historyList = document.getElementById("historyList");
+            const chatBox = document.getElementById("chatMessages");
+
+            historyList.innerHTML = "";
+
+            history.forEach(item => {
+                // hiện trong chatbox chính
+                chatBox.innerHTML += `
+                    <div class="user-message">${item.user}</div>
+                    <div class="bot-message">${item.bot}</div>
+                `;
+
+                // hiện ở panel trái
+                historyList.innerHTML += `
+                    <div class="history-item">
+                        ${item.user}
+                    </div>
+                `;
+            });
+
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+        } catch (error) {
+            console.log(error);
+        }
+    }
+    loadChatHistory();
 </script>
 
 {% endblock %}

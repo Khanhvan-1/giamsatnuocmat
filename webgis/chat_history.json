@@ -1,0 +1,22 @@
+[
+  {
+    "user": "có bao nhiêu điểm quan trăc",
+    "bot": "Hiện có 37 điểm quan trắc."
+  },
+  {
+    "user": "điểm nào có bod5 cao nhất",
+    "bot": "Điểm SG25 có BOD5 cao nhất: 17.94"
+  },
+  {
+    "user": "toạ độ",
+    "bot": "Tôi chưa hiểu câu hỏi này."
+  },
+  {
+    "user": "cho tôi xin vị trí",
+    "bot": "Điểm SG25 có tọa độ:\n\nLat: 10.977309\nLng: 106.6365068\n"
+  },
+  {
+    "user": "gửi link",
+    "bot": "<a href=\"http://127.0.0.1:8000/?center=10.977309,106.6365068\" target=\"_blank\">📍 Xem trên bản đồ</a>"
+  }
+]
