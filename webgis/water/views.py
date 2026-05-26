@@ -26,7 +26,15 @@ def load_chat_history():
 def save_chat(user_msg, bot_reply):
     history = load_chat_history()
 
-    history.append({
+    # nếu chưa có session nào → tạo mới
+    if not history:
+        history.append({
+            "title": user_msg,
+            "messages": []
+        })
+
+    # thêm vào session cuối cùng
+    history[-1]["messages"].append({
         "user": user_msg,
         "bot": bot_reply
     })
@@ -53,6 +61,22 @@ def clear_chat_history(request):
         "message": "Dùng POST để xoá."
     })
 
+@csrf_exempt
+def new_chat(request):
+    if request.method == "POST":
+        history = load_chat_history()
+
+        history.append({
+            "title": "Chat mới",
+            "messages": []
+        })
+
+        with open(CHAT_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+
+        return JsonResponse({"ok": True})
+
+    return JsonResponse({"ok": False})
 
 # =========================
 # LẤY DỮ LIỆU ĐIỂM QUAN TRẮC

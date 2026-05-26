@@ -13,4 +13,5 @@ path("chat-history/", views.get_chat_history),
 
 path("clear-chat-history/", views.clear_chat_history),
 
+path("api/new-chat/", views.new_chat),
 ]

@@ -146,6 +146,36 @@
             layers: [streetMap]
         });
 
+        // ==================== VỊ TRÍ HIỆN TẠI ====================
+        let userMarker = null;
+
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(function(position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+
+                // xóa marker cũ
+                if (userMarker) {
+                    map.removeLayer(userMarker);
+                }
+
+                // tạo marker vị trí hiện tại
+                userMarker = L.circleMarker([lat, lng], {
+                    radius: 8,
+                    color: '#ffffff',
+                    weight: 3,
+                    fillColor: '#1e90ff',
+                    fillOpacity: 1
+                }).addTo(map);
+
+                userMarker.bindPopup("📍 Vị trí hiện tại của bạn");
+
+            }, function(error) {
+                console.log("Không lấy được vị trí:", error);
+            }, {
+                enableHighAccuracy: true
+            });
+        }
         var baseMaps = {
             "🗺️ Không nhãn": streetMap,
             "🛰️ Google Satellite": googleSat,
@@ -595,7 +625,30 @@
                 let lng = p.geometry.coordinates[0];
                 let color = '#3388ff';
                 let marker = L.circleMarker([lat, lng], { radius: 7, color: color, fillOpacity: 0.9, weight: 1 })
-                    .bindPopup(`<b>${p.ma_diem}</b><br>pH: ${p.ph}<br>DO: ${p.do}<br>BOD5: ${p.bod5}<br>COD: ${p.cod}<br>NH4: ${p.nh4}<br>Coliform: ${p.coliform}`);
+                   .bindPopup(`
+                        <b>${p.ma_diem}</b><br>
+                        pH: ${p.ph}<br>
+                        DO: ${p.do}<br>
+                        BOD5: ${p.bod5}<br>
+                        COD: ${p.cod}<br>
+                        NH4: ${p.nh4}<br>
+                        Coliform: ${p.coliform}<br><br>
+
+                        <button 
+                            type="button"
+                            onclick="window.goToHere(${lat}, ${lng})"
+                            style="
+                                padding:8px 12px;
+                                border:none;
+                                background:#1e90ff;
+                                color:white;
+                                border-radius:6px;
+                                cursor:pointer;
+                                font-weight:bold;
+                            ">
+                            🧭 Chỉ đường tới đây
+                        </button>
+                    `);
                 markersCluster.addLayer(marker);
             });
 
@@ -1283,7 +1336,23 @@
                 updateLayerControl();
             }).catch(err => console.error("Lỗi ranh giới:", err));
 
+        // ==================== CHỈ ĐƯỜNG ====================
+        window.goToHere = function(destLat, destLng) {
+            if (!navigator.geolocation) {
+                alert("Trình duyệt không hỗ trợ định vị");
+                return;
+            }
 
+            navigator.geolocation.getCurrentPosition(function(pos) {
+                const userLat = pos.coords.latitude;
+                const userLng = pos.coords.longitude;
+
+                const url =
+                    `https://www.google.com/maps/dir/${userLat},${userLng}/${destLat},${destLng}`;
+
+                window.open(url, "_blank");
+            });
+        };
         window.generateSingleInterpolation = generateSingleInterpolation;
         window.generateCombinedAverage = generateCombinedAverage;
     });

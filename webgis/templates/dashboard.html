@@ -131,38 +131,41 @@
 <!-- Chatbox -->
 <div id="chatbox" class="hidden">
 
+    <!-- Cột lịch sử bên trái -->
     <div id="chatHistoryPanel">
-        <h3>Lịch sử chat</h3>
+        <h4>Lịch sử</h4>
         <div id="historyList"></div>
     </div>
 
-    <div id="chatHeader">
-        <span>🤖 AI Water Assistant</span>
+    <!-- Cột chat bên phải -->
+    <div id="chatMain">
 
-        <button id="closeChatBtn" onclick="toggleChat()">
-            ✕
-        </button>
-    </div>
-
-    <div id="chatMessages">
-        <div class="bot-msg">
-            Xin chào 👋
+        <div id="chatHeader">
+            <span>🤖 AI Water Assistant</span>
+            <button id="closeChatBtn" onclick="toggleChat()">✕</button>
         </div>
-    </div>
 
-    <div id="chatInputBox">
-        <input
-            type="text"
-            id="chatInput"
-            placeholder="Nhập câu hỏi..."
-            onkeypress="if(event.key==='Enter') sendMessage()"
-        >
-        <button onclick="sendMessage()">Gửi</button>
-    </div>
+        <div id="chatMessages">
+            <div class="bot-msg">
+                Xin chào 👋
+            </div>
+        </div>
 
+        <div id="chatInputBox">
+            <input
+                type="text"
+                id="chatInput"
+                placeholder="Nhập câu hỏi..."
+                onkeypress="if(event.key==='Enter') sendMessage()"
+            >
+            <button onclick="sendMessage()">Gửi</button>
+        </div>
+
+    </div>
 </div>
-<div class="chat-body" id="chatMessages"></div>
-
+    <button onclick="startNewChat()">
+    + Chat mới
+    </button>
 <style>
 
     .warning-actions {
@@ -705,21 +708,6 @@
         box-shadow:0 8px 20px rgba(0,0,0,0.25);
     }
 
-    #chatbox{
-        position: fixed;
-        bottom: 100px;
-        right: 25px;
-        width: 350px;
-        height: 480px;
-        background:white;
-        border-radius:20px;
-        box-shadow:0 15px 40px rgba(0,0,0,0.25);
-        z-index:9999;
-        display:flex;
-        flex-direction:column;
-        overflow:hidden;
-    }
-
     .hidden{
         display:none !important;
     }
@@ -785,43 +773,59 @@
         cursor:pointer;
     }
 
-    .user-message{
-        background:#dce8ff;
-        padding:12px;
-        border-radius:15px;
-        margin:10px;
-        text-align:right;
+    #chatbox{
+        position: fixed;
+        bottom: 100px;
+        right: 25px;
+        width: 650px;
+        height: 500px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 15px 40px rgba(0,0,0,0.25);
+        z-index: 9999;
+        display: flex;
+        overflow: hidden;
     }
 
-    .bot-message{
-        background:white;
-        padding:12px;
-        border-radius:15px;
-        margin:10px;
-        border:1px solid #ddd;
-    }
-
+    /* Cột lịch sử */
     #chatHistoryPanel{
-        width:220px;
-        height:400px;
-        background:white;
-        border:1px solid #ddd;
-        border-radius:10px;
-        padding:10px;
-        overflow-y:auto;
+        width: 180px;
+        border-right: 1px solid #ddd;
+        background: #f8fafc;
+        padding: 10px;
+        overflow-y: auto;
     }
 
+    #chatHistoryPanel h4{
+        margin-top: 0;
+        text-align: center;
+        color: #2563eb;
+    }
+
+    /* từng dòng lịch sử */
     .history-item{
-        padding:8px;
-        margin-bottom:8px;
-        background:#f5f5f5;
-        border-radius:8px;
-        cursor:pointer;
-        font-size:14px;
+        padding: 10px;
+        margin-bottom: 8px;
+        background: white;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 13px;
+        border: 1px solid #ddd;
+
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .history-item:hover{
-        background:#e8e8e8;
+        background: #dbeafe;
+    }
+
+    /* phần chat bên phải */
+    #chatMain{
+        flex: 1;
+        display: flex;
+        flex-direction: column;
     }
 </style>
 
@@ -1496,35 +1500,75 @@
     }
 
     async function loadChatHistory() {
-        try {
-            const response = await fetch("/api/chat-history/");
-            const history = await response.json();
+        const res = await fetch("/api/chat-history/");
+        const history = await res.json();
 
-            const historyList = document.getElementById("historyList");
-            const chatBox = document.getElementById("chatMessages");
+        const historyList =
+            document.getElementById("historyList");
 
-            historyList.innerHTML = "";
+        historyList.innerHTML = "";
 
-            history.forEach(item => {
-                // hiện trong chatbox chính
-                chatBox.innerHTML += `
-                    <div class="user-message">${item.user}</div>
-                    <div class="bot-message">${item.bot}</div>
-                `;
+        history.forEach((chat, index) => {
 
-                // hiện ở panel trái
-                historyList.innerHTML += `
-                    <div class="history-item">
-                        ${item.user}
-                    </div>
-                `;
-            });
+            let title = chat.title;
 
-            chatBox.scrollTop = chatBox.scrollHeight;
+            if(title.length > 25){
+                title = title.substring(0,25) + "...";
+            }
 
-        } catch (error) {
-            console.log(error);
-        }
+            historyList.innerHTML += `
+                <div class="history-item"
+                    onclick="openOldChat(${index})">
+                    ${title}
+                </div>
+            `;
+        });
+    }
+
+
+    async function openOldChat(index){
+        const res =
+            await fetch("/api/chat-history/");
+        const history =
+            await res.json();
+
+        const chatBox =
+            document.getElementById("chatMessages");
+
+        chatBox.innerHTML = "";
+
+        const messages =
+            history[index].messages;
+
+        messages.forEach(msg => {
+
+            chatBox.innerHTML += `
+                <div class="user-msg">
+                    ${msg.user}
+                </div>
+            `;
+
+            chatBox.innerHTML += `
+                <div class="bot-msg">
+                    ${msg.bot}
+                </div>
+            `;
+        });
+
+        chatBox.scrollTop =
+            chatBox.scrollHeight;
+    }
+    
+    async function startNewChat(){
+        await fetch("/api/new-chat/", {
+            method:"POST"
+        });
+
+        document.getElementById(
+            "chatMessages"
+        ).innerHTML = "";
+
+        loadChatHistory();
     }
     loadChatHistory();
 </script>
