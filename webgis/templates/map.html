@@ -1,8 +1,21 @@
 {% extends "base.html" %}
 
 {% block content %}
+
 <div id="map"></div>
 
+<button id="openRouteBox"> Tìm đường đi</button>
+
+<div id="routeBox">
+    <input type="text" id="startLocation" placeholder="Nhập vị trí hiện tại">
+    <input type="text" id="endLocation" placeholder="Nhập nơi muốn đến">
+
+    <button onclick="findRoute()">
+        Tìm đường
+    </button>
+
+    <div id="routeInfo"></div>
+</div>
 <a href="/dashboard" id="btnDashboard"> Thống kê</a>
 
 <!-- Legend tổng hợp (trung bình 6 chỉ tiêu) -->
@@ -19,7 +32,7 @@
     <button onclick="generateSingleInterpolation('nh4')">NH4</button>
     <button onclick="generateSingleInterpolation('coliform')">Coliform</button>
     <button id="btnFlow">Dòng chảy sông</button><br>
-    <button id="btnOff">Tắt lớp</button>
+    <button id="btnOff">Tắt lớp</button>    
 </div>
 
 <style>
@@ -115,6 +128,44 @@
         color: white; font-weight: bold; border-radius: 50%;
         text-align: center; line-height: 30px; box-shadow: 0 0 0 2px white;
     }
+
+    #openRouteBox{
+        position:absolute;
+        top:20px;
+        left:20px;
+        z-index:9999;
+        padding:10px 15px;
+        background:#007bff;
+        color:white;
+        border:none;
+        border-radius:8px;
+        cursor:pointer;
+    }
+
+    #routeBox{
+        position:absolute;
+        top:70px;
+        left:20px;
+        z-index:9999;
+        background:white;
+        padding:15px;
+        width:300px;
+        border-radius:10px;
+        display:none;
+        box-shadow:0 0 10px rgba(0,0,0,0.3);
+    }
+
+    #routeBox input{
+        width:100%;
+        padding:10px;
+        margin-bottom:10px;
+    }
+
+    #routeInfo{
+        margin-top:10px;
+        font-weight:bold;
+    }
+
 </style>
 
 <script>
@@ -144,6 +195,41 @@
             center: [10.75, 106.65],
             zoom: 11,
             layers: [streetMap]
+        });
+
+
+        map.on("click", function(e){
+
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+
+            fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+            )
+            .then(res => res.json())
+            .then(data => {
+
+                const name =
+                    data.display_name || "Không có thông tin";
+
+                L.popup()
+                    .setLatLng([lat, lng])
+                    .setContent(`
+                        <b>Thông tin vị trí</b>
+                        <br><br>
+                        ${name}
+                        <br><br>
+
+                        <button onclick="
+                            document.getElementById('endLocation').value='${name}'
+                        ">
+                            📍 Chọn làm điểm đến
+                        </button>
+                    `)
+                    .openOn(map);
+
+            });
+
         });
 
         // ==================== VỊ TRÍ HIỆN TẠI ====================
@@ -611,22 +697,34 @@
         // ==================== VẼ ĐIỂM QUAN TRẮC ====================
         function renderPoints() {
             if (pointsLayer) map.removeLayer(pointsLayer);
+
             var markersCluster = L.markerClusterGroup({
                 maxClusterRadius: 40,
-                iconCreateFunction: (cluster) => L.divIcon({ 
-                    html: '<b>' + cluster.getChildCount() + '</b>', 
-                    className: 'my-cluster-icon', iconSize: [30, 30] 
+                iconCreateFunction: (cluster) => L.divIcon({
+                    html: '<b>' + cluster.getChildCount() + '</b>',
+                    className: 'my-cluster-icon',
+                    iconSize: [30, 30]
                 })
             });
 
             currentPointData.forEach(p => {
+
                 if (!p.geometry?.coordinates) return;
+
                 let lat = p.geometry.coordinates[1];
                 let lng = p.geometry.coordinates[0];
-                let color = '#3388ff';
-                let marker = L.circleMarker([lat, lng], { radius: 7, color: color, fillOpacity: 0.9, weight: 1 })
-                   .bindPopup(`
-                        <b>${p.ma_diem}</b><br>
+
+                let marker = L.circleMarker([lat, lng], {
+                    radius: 7,
+                    color: '#3388ff',
+                    fillOpacity: 0.9,
+                    weight: 1
+                });
+
+                marker.bindPopup(`
+                    <div style="min-width:180px">
+                        <b>${p.ma_diem}</b><br><br>
+
                         pH: ${p.ph}<br>
                         DO: ${p.do}<br>
                         BOD5: ${p.bod5}<br>
@@ -635,25 +733,29 @@
                         Coliform: ${p.coliform}<br><br>
 
                         <button 
-                            type="button"
-                            onclick="window.goToHere(${lat}, ${lng})"
+                            onclick="goToHere(${lat}, ${lng})"
                             style="
-                                padding:8px 12px;
-                                border:none;
-                                background:#1e90ff;
+                                background:#2196f3;
                                 color:white;
+                                border:none;
+                                padding:8px 12px;
                                 border-radius:6px;
                                 cursor:pointer;
-                                font-weight:bold;
-                            ">
+                                width:100%;
+                            "
+                        >
                             🧭 Chỉ đường tới đây
                         </button>
-                    `);
+                    </div>
+                `);
+
                 markersCluster.addLayer(marker);
             });
 
             pointsLayer = markersCluster.addTo(map);
+
             overlayLayers["Điểm quan trắc"] = pointsLayer;
+
             updateLayerControl();
         }
 
@@ -1336,25 +1438,152 @@
                 updateLayerControl();
             }).catch(err => console.error("Lỗi ranh giới:", err));
 
+
         // ==================== CHỈ ĐƯỜNG ====================
         window.goToHere = function(destLat, destLng) {
+
             if (!navigator.geolocation) {
                 alert("Trình duyệt không hỗ trợ định vị");
                 return;
             }
 
-            navigator.geolocation.getCurrentPosition(function(pos) {
-                const userLat = pos.coords.latitude;
-                const userLng = pos.coords.longitude;
+            navigator.geolocation.getCurrentPosition(
 
-                const url =
-                    `https://www.google.com/maps/dir/${userLat},${userLng}/${destLat},${destLng}`;
+                function(position) {
 
-                window.open(url, "_blank");
-            });
+                    const userLat = position.coords.latitude;
+                    const userLng = position.coords.longitude;
+
+                    const url =
+                        `https://www.google.com/maps/dir/${userLat},${userLng}/${destLat},${destLng}`;
+
+                    window.open(url, "_blank");
+                },
+
+                function(error) {
+                    console.log(error);
+
+                    alert(
+                        "Không lấy được vị trí hiện tại.\n\n" +
+                        "Hãy cho phép quyền Location trên trình duyệt."
+                    );
+                },
+
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
         };
         window.generateSingleInterpolation = generateSingleInterpolation;
         window.generateCombinedAverage = generateCombinedAverage;
+        // ==================== MỞ / ĐÓNG BOX ====================
+
+        document.getElementById("openRouteBox").onclick = function(){
+            const box = document.getElementById("routeBox");
+
+            if(box.style.display === "none"){
+                box.style.display = "block";
+            }else{
+                box.style.display = "none";
+            }
+        };
+
+        // ==================== ROUTING ====================
+
+        let routingControl = null;
+
+        function findRoute(){
+
+            const start = document.getElementById("startLocation").value;
+            const end = document.getElementById("endLocation").value;
+
+            if(!start || !end){
+                alert("Nhập đủ vị trí");
+                return;
+            }
+
+            Promise.all([
+                geocodeAddress(start),
+                geocodeAddress(end)
+            ]).then(results => {
+
+                const startLatLng = results[0];
+                const endLatLng = results[1];
+
+                if(routingControl){
+                    map.removeControl(routingControl);
+                }
+
+                routingControl = L.Routing.control({
+
+                    waypoints: [
+                        L.latLng(startLatLng.lat, startLatLng.lng),
+                        L.latLng(endLatLng.lat, endLatLng.lng)
+                    ],
+
+                    routeWhileDragging: false,
+
+                    show: false,
+
+                    addWaypoints: false,
+
+                    lineOptions: {
+                        styles: [{ color: 'blue', weight: 6 }]
+                    }
+
+                }).addTo(map);
+
+
+                routingControl.on('routesfound', function(e){
+
+                    const route = e.routes[0];
+
+                    const distance =
+                        (route.summary.totalDistance / 1000).toFixed(2);
+
+                    const time =
+                        Math.round(route.summary.totalTime / 60);
+
+                    document.getElementById("routeInfo").innerHTML =
+                        `
+                        🚗 Khoảng cách: ${distance} km
+                        <br>
+                        ⏱️ Thời gian: ${time} phút
+                        `;
+                });
+
+            });
+        }
+
+        // ==================== GEOCODE ====================
+
+        function geocodeAddress(address){
+
+            return new Promise((resolve, reject)=>{
+
+                fetch(
+                    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`
+                )
+                .then(res => res.json())
+                .then(data => {
+
+                    if(data.length === 0){
+                        alert("Không tìm thấy địa điểm");
+                        return;
+                    }
+
+                    resolve({
+                        lat: parseFloat(data[0].lat),
+                        lng: parseFloat(data[0].lon)
+                    });
+
+                });
+
+            });
+
+        }
     });
 </script>
 {% endblock %}
