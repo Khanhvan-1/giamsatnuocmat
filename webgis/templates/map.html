@@ -7,8 +7,10 @@
 <button id="openRouteBox"> Tìm đường đi</button>
 
 <div id="routeBox">
-    <input type="text" id="startLocation" placeholder="Nhập vị trí hiện tại">
-    <input type="text" id="endLocation" placeholder="Nhập nơi muốn đến">
+    <input type="text" id="startLocation" list="startSuggestions"  placeholder="Nhập vị trí hiện tại">
+    <datalist id="startSuggestions"></datalist>
+    <input type="text" id="endLocation" list="endSuggestions" placeholder="Nhập nơi muốn đến">
+    <datalist id="endSuggestions"></datalist> 
 
     <button onclick="findRoute()">
         Tìm đường
@@ -198,37 +200,85 @@
         });
 
 
-        map.on("click", function(e){
+        map.on("click", async function(e){
 
             const lat = e.latlng.lat;
             const lng = e.latlng.lng;
 
-            fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
-            )
-            .then(res => res.json())
-            .then(data => {
+            const query = `
+            [out:json];
+            (
+            node(around:50,${lat},${lng})[name];
+            way(around:50,${lat},${lng})[name];
+            );
+            out center tags;
+            `;
 
-                const name =
-                    data.display_name || "Không có thông tin";
+            const url =
+                "https://overpass-api.de/api/interpreter?data="
+                + encodeURIComponent(query);
+
+            try{
+
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if(data.elements.length === 0){
+
+                    L.popup()
+                        .setLatLng([lat,lng])
+                        .setContent("Không có thông tin")
+                        .openOn(map);
+
+                    return;
+                }
+
+                const place = data.elements[0];
+
+                const tags = place.tags || {};
 
                 L.popup()
-                    .setLatLng([lat, lng])
+                    .setLatLng([lat,lng])
                     .setContent(`
-                        <b>Thông tin vị trí</b>
-                        <br><br>
-                        ${name}
-                        <br><br>
+                        <div style="width:250px">
 
-                        <button onclick="
-                            document.getElementById('endLocation').value='${name}'
-                        ">
-                            📍 Chọn làm điểm đến
-                        </button>
+                            <h3>
+                                ${tags.name || "Không rõ"}
+                            </h3>
+
+                            🏪 ${tags.shop || tags.amenity || "Địa điểm"}
+
+                            <br><br>
+
+                            📍 ${tags["addr:street"] || ""}
+
+                            <br><br>
+
+                            ☎ ${tags.phone || "Không có"}
+
+                            <br><br>
+
+                            🌐 ${
+                                tags.website
+                                ? `<a href="${tags.website}" target="_blank">Website</a>`
+                                : "Không có"
+                            }
+
+                            <br><br>
+
+                            🕒 ${
+                                tags.opening_hours || "Không rõ"
+                            }
+
+                        </div>
                     `)
                     .openOn(map);
 
-            });
+            }catch(err){
+
+                console.log(err);
+
+            }
 
         });
 
@@ -1478,6 +1528,7 @@
         };
         window.generateSingleInterpolation = generateSingleInterpolation;
         window.generateCombinedAverage = generateCombinedAverage;
+        window.findRoute = findRoute;
         // ==================== MỞ / ĐÓNG BOX ====================
 
         document.getElementById("openRouteBox").onclick = function(){
@@ -1557,6 +1608,48 @@
             });
         }
 
+
+        // ==================== AUTOCOMPLETE ====================
+
+        async function searchSuggestions(keyword, listId){
+
+            if(keyword.length < 3) return;
+
+            const url =
+                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(keyword)}&limit=5`;
+
+            const res = await fetch(url);
+            const data = await res.json();
+
+            const datalist = document.getElementById(listId);
+
+            datalist.innerHTML = "";
+
+            data.forEach(place => {
+
+                const option = document.createElement("option");
+
+                option.value = place.display_name;
+
+                datalist.appendChild(option);
+
+            });
+
+        }
+
+        document.getElementById("startLocation")
+        .addEventListener("input", function(){
+
+            searchSuggestions(this.value, "startSuggestions");
+
+        });
+
+        document.getElementById("endLocation")
+        .addEventListener("input", function(){
+
+            searchSuggestions(this.value, "endSuggestions");
+
+        });
         // ==================== GEOCODE ====================
 
         function geocodeAddress(address){
