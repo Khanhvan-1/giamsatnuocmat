@@ -4,7 +4,8 @@ from django.views.decorators.csrf import csrf_exempt
 import psycopg2
 import json
 import os
-
+import requests
+from django.views.decorators.http import require_http_methods
 
 # =========================
 # BIẾN TOÀN CỤC
@@ -354,3 +355,70 @@ Caliform: {point['caliform']}
     return JsonResponse({
         "reply": "Chatbot API đang hoạt động."
     })
+
+@require_http_methods(["GET"])
+@csrf_exempt
+def proxy_nominatim_search(request):
+    q = request.GET.get('q', '')
+    limit = request.GET.get('limit', 8)
+    countrycodes = request.GET.get('countrycodes', 'vn')
+    viewbox = request.GET.get('viewbox', '')
+    lat = request.GET.get('lat', '')
+    lon = request.GET.get('lon', '')
+    radius = request.GET.get('radius', '')
+    
+    url = 'https://nominatim.openstreetmap.org/search'
+    params = {
+        'format': 'json',
+        'q': q,
+        'limit': limit,
+        'countrycodes': countrycodes,
+        'addressdetails': 1,
+    }
+    if viewbox:
+        params['viewbox'] = viewbox
+        params['bounded'] = 1
+    if lat and lon:
+        params['lat'] = lat
+        params['lon'] = lon
+        params['radius'] = radius if radius else 5000
+    
+    headers = {'User-Agent': 'WaterQualityGIS/1.0 (nguyenhungvankhanh09012004@gmail.com)'}
+    try:
+        print(f"🔍 Gọi search: {url} với params {params}")
+        resp = requests.get(url, params=params, headers=headers, timeout=10)
+        resp.raise_for_status()
+        return JsonResponse(resp.json(), safe=False)
+    except Exception as e:
+        print(f"❌ Lỗi proxy search: {e}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': str(e)}, status=500)
+
+@require_http_methods(["GET"])
+@csrf_exempt
+def proxy_nominatim_reverse(request):
+    lat = request.GET.get('lat')
+    lon = request.GET.get('lon')
+    if not lat or not lon:
+        return JsonResponse({'error': 'Missing lat/lon'}, status=400)
+    
+    url = 'https://nominatim.openstreetmap.org/reverse'
+    params = {
+        'format': 'json',
+        'lat': lat,
+        'lon': lon,
+        'zoom': 18,
+        'addressdetails': 1,
+    }
+    headers = {'User-Agent': 'WaterQualityGIS/1.0 (nguyenhungvankhanh09012004@gmail.com)'}
+    try:
+        print(f"🔍 Gọi reverse: lat={lat}, lon={lon}")
+        resp = requests.get(url, params=params, headers=headers, timeout=10)
+        resp.raise_for_status()
+        return JsonResponse(resp.json())
+    except Exception as e:
+        print(f"❌ Lỗi proxy reverse: {e}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': str(e)}, status=500)

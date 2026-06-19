@@ -7,15 +7,14 @@
 <button id="openRouteBox"> Tìm đường đi</button>
 
 <div id="routeBox">
-    <input type="text" id="startLocation" list="startSuggestions"  placeholder="Nhập vị trí hiện tại">
-    <datalist id="startSuggestions"></datalist>
-    <input type="text" id="endLocation" list="endSuggestions" placeholder="Nhập nơi muốn đến">
-    <datalist id="endSuggestions"></datalist> 
-
-    <button onclick="findRoute()">
-        Tìm đường
-    </button>
-
+    <div class="header">
+        <h4 style="margin:0">Chỉ đường</h4>
+        <button id="closeRouteBtn">✕</button>
+    </div>
+        <input id="startLocation" list="startList" placeholder="Nhập vị trí hiện tại">
+        <button id="useMyLocationBtn">📍 Sử dụng vị trí hiện tại của tôi</button>
+        <input id="endLocation" list="endList" placeholder="Nhập nơi muốn đến">
+        <button onclick="findRoute()">Tìm đường</button>
     <div id="routeInfo"></div>
 </div>
 <a href="/dashboard" id="btnDashboard"> Thống kê</a>
@@ -144,23 +143,16 @@
         cursor:pointer;
     }
 
-    #routeBox{
-        position:absolute;
-        top:70px;
-        left:20px;
-        z-index:9999;
-        background:white;
-        padding:15px;
-        width:300px;
-        border-radius:10px;
-        display:none;
-        box-shadow:0 0 10px rgba(0,0,0,0.3);
+    #routeBox input{
+        height:48px;
+        border-radius:12px;
+        border:1px solid #ddd;
     }
 
-    #routeBox input{
-        width:100%;
-        padding:10px;
-        margin-bottom:10px;
+    #routeBox button{
+        height:48px;
+        border-radius:12px;
+        font-size:16px;
     }
 
     #routeInfo{
@@ -168,6 +160,86 @@
         font-weight:bold;
     }
 
+    #routeBox {
+        background: #fff;
+        border-radius: 16px;
+        width: 380px;
+        padding: 20px;
+        box-shadow: 0 8px 30px rgba(0,0,0,.15);
+        position: relative; /* đảm bảo các phần tử con absolute hoạt động tốt */
+    }
+
+    #routeBox .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+
+    #closeRouteBtn {
+        background: red;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        cursor: pointer;
+        font-size: 20px;
+        font-weight: bold;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+    }
+
+    #useMyLocationBtn {
+        background-color: #28a745;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 10px;
+        width: 100%;
+        cursor: pointer;
+        margin: 8px 0;
+        font-size: 14px;
+    }
+
+    #routeBox input, #routeBox button {
+        box-sizing: border-box;
+    }
+    #useMyLocationBtn {
+        background-color: #28a745;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 10px;
+        width: 100%;
+        cursor: pointer;
+        margin: 8px 0;
+        font-size: 14px;
+    }
+    .red-arrow-marker {
+        background: red;
+        color: white;
+        font-size: 20px;
+        text-align: center;
+        line-height: 24px;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        font-weight: bold;
+    }
+
+    .custom-dropdown {
+        position: absolute;
+        background: white;
+        border: 1px solid #ccc;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 10000;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    } 
 </style>
 
 <script>
@@ -199,113 +271,50 @@
             layers: [streetMap]
         });
 
-
-        map.on("click", async function(e){
-
+        map.on("click", async function(e) {
             const lat = e.latlng.lat;
             const lng = e.latlng.lng;
-
-            const query = `
-            [out:json];
-            (
-            node(around:50,${lat},${lng})[name];
-            way(around:50,${lat},${lng})[name];
-            );
-            out center tags;
-            `;
-
-            const url =
-                "https://overpass-api.de/api/interpreter?data="
-                + encodeURIComponent(query);
-
-            try{
-
+            const url = `/api/proxy/nominatim/reverse/?lat=${lat}&lon=${lng}`;
+            try {
                 const res = await fetch(url);
                 const data = await res.json();
-
-                if(data.elements.length === 0){
-
-                    L.popup()
-                        .setLatLng([lat,lng])
-                        .setContent("Không có thông tin")
-                        .openOn(map);
-
-                    return;
-                }
-
-                const place = data.elements[0];
-
-                const tags = place.tags || {};
-
+                const displayName = data.display_name || "Không rõ địa điểm";
                 L.popup()
-                    .setLatLng([lat,lng])
-                    .setContent(`
-                        <div style="width:250px">
-
-                            <h3>
-                                ${tags.name || "Không rõ"}
-                            </h3>
-
-                            🏪 ${tags.shop || tags.amenity || "Địa điểm"}
-
-                            <br><br>
-
-                            📍 ${tags["addr:street"] || ""}
-
-                            <br><br>
-
-                            ☎ ${tags.phone || "Không có"}
-
-                            <br><br>
-
-                            🌐 ${
-                                tags.website
-                                ? `<a href="${tags.website}" target="_blank">Website</a>`
-                                : "Không có"
-                            }
-
-                            <br><br>
-
-                            🕒 ${
-                                tags.opening_hours || "Không rõ"
-                            }
-
-                        </div>
-                    `)
+                    .setLatLng([lat, lng])
+                    .setContent(`<div style="width:250px"><h3>${displayName}</h3></div>`)
                     .openOn(map);
-
-            }catch(err){
-
+            } catch (err) {
                 console.log(err);
-
+                L.popup().setLatLng([lat, lng]).setContent("Không có thông tin").openOn(map);
             }
-
         });
 
         // ==================== VỊ TRÍ HIỆN TẠI ====================
         let userMarker = null;
+        let currentUserPos = null; 
 
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition(function(position) {
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
+                currentUserPos = { lat, lng };
 
-                // xóa marker cũ
+                // Xóa marker cũ nếu có
                 if (userMarker) {
                     map.removeLayer(userMarker);
                 }
 
-                // tạo marker vị trí hiện tại
-                userMarker = L.circleMarker([lat, lng], {
-                    radius: 8,
-                    color: '#ffffff',
-                    weight: 3,
-                    fillColor: '#1e90ff',
-                    fillOpacity: 1
-                }).addTo(map);
+                // Tạo icon mũi tên đỏ
+                var redArrowIcon = L.divIcon({
+                    html: '▼',
+                    className: 'red-arrow-marker',
+                    iconSize: [24, 24],
+                    popupAnchor: [0, -12]
+                });
 
+                // Tạo marker mới
+                userMarker = L.marker([lat, lng], { icon: redArrowIcon }).addTo(map);
                 userMarker.bindPopup("📍 Vị trí hiện tại của bạn");
-
             }, function(error) {
                 console.log("Không lấy được vị trí:", error);
             }, {
@@ -1545,138 +1554,310 @@
 
         let routingControl = null;
 
-        function findRoute(){
+        async function geocodeAddress(address) {
+            if (!address) throw new Error("Địa chỉ trống");
+            let url = `/api/proxy/nominatim/search/?q=${encodeURIComponent(address)}&limit=5&countrycodes=vn&bounded=1&addressdetails=1`;
+            if (currentUserPos) {
+                url += `&lat=${currentUserPos.lat}&lon=${currentUserPos.lng}&radius=5000`;
+            } else {
+                url += `&viewbox=106.3,11.3,107.0,10.3&bounded=1`;
+            }
+            const response = await fetch(url);
+            const data = await response.json();
+            if (!data.length) throw new Error("Không tìm thấy địa chỉ trong khu vực Việt Nam");
+            return {
+                lat: parseFloat(data[0].lat),
+                lng: parseFloat(data[0].lon),
+                display_name: data[0].display_name
+            };
+        }
 
+        function safeRemoveRouting() {
+            if (routingControl) {
+                try {
+                    map.removeControl(routingControl);
+                } catch(e) {
+                    console.warn("Lỗi xóa routing:", e);
+                }
+                routingControl = null;
+            }
+        }
+
+        // Thêm hàm tự động xóa route khi cả hai input rỗng
+        function autoClearRouteOnEmpty() {
+            const start = document.getElementById("startLocation").value.trim();
+            const end = document.getElementById("endLocation").value.trim();
+            if (start === "" && end === "") {
+                safeRemoveRouting();
+                document.getElementById("routeInfo").innerHTML = "";
+            }
+        }
+
+        // Gọi hàm này trước khi tạo routing mới
+        function findRoute() {
             const start = document.getElementById("startLocation").value;
             const end = document.getElementById("endLocation").value;
+            if (!start || !end) return alert("Nhập đủ vị trí");
 
-            if(!start || !end){
-                alert("Nhập đủ vị trí");
-                return;
-            }
+            safeRemoveRouting(); // xóa cũ an toàn
 
-            Promise.all([
-                geocodeAddress(start),
-                geocodeAddress(end)
-            ]).then(results => {
-
-                const startLatLng = results[0];
-                const endLatLng = results[1];
-
-                if(routingControl){
-                    map.removeControl(routingControl);
-                }
-
-                routingControl = L.Routing.control({
-
-                    waypoints: [
-                        L.latLng(startLatLng.lat, startLatLng.lng),
-                        L.latLng(endLatLng.lat, endLatLng.lng)
-                    ],
-
-                    routeWhileDragging: false,
-
-                    show: false,
-
-                    addWaypoints: false,
-
-                    lineOptions: {
-                        styles: [{ color: 'blue', weight: 6 }]
-                    }
-
-                }).addTo(map);
-
-
-                routingControl.on('routesfound', function(e){
-
-                    const route = e.routes[0];
-
-                    const distance =
-                        (route.summary.totalDistance / 1000).toFixed(2);
-
-                    const time =
-                        Math.round(route.summary.totalTime / 60);
-
-                    document.getElementById("routeInfo").innerHTML =
-                        `
-                        🚗 Khoảng cách: ${distance} km
-                        <br>
-                        ⏱️ Thời gian: ${time} phút
+            Promise.all([geocodeAddress(start), geocodeAddress(end)])
+                .then(results => {
+                    const startLatLng = results[0];
+                    const endLatLng = results[1];
+                    
+                    routingControl = L.Routing.control({
+                        waypoints: [L.latLng(startLatLng.lat, startLatLng.lng), L.latLng(endLatLng.lat, endLatLng.lng)],
+                        routeWhileDragging: false,
+                        show: false,
+                        addWaypoints: false,
+                        lineOptions: { styles: [{ color: 'blue', weight: 6 }] },
+                        router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' })
+                    }).addTo(map);
+                    
+                    routingControl.on('routesfound', function(e) {
+                        const route = e.routes[0];
+                        const distance = (route.summary.totalDistance / 1000).toFixed(2);
+                        const time = Math.round(route.summary.totalTime / 60);
+                        document.getElementById("routeInfo").innerHTML = `
+                            🚗 Khoảng cách: ${distance} km<br>
+                            ⏱️ Thời gian: ${time} phút
                         `;
+                    });
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert("Không thể tìm đường: " + err.message);
                 });
-
-            });
         }
 
 
         // ==================== AUTOCOMPLETE ====================
+        const suggestionCache = {};
 
-        async function searchSuggestions(keyword, listId){
-
-            if(keyword.length < 3) return;
-
-            const url =
-                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(keyword)}&limit=5`;
-
-            const res = await fetch(url);
-            const data = await res.json();
-
-            const datalist = document.getElementById(listId);
-
-            datalist.innerHTML = "";
-
-            data.forEach(place => {
-
-                const option = document.createElement("option");
-
-                option.value = place.display_name;
-
-                datalist.appendChild(option);
-
-            });
-
+        function isInHCM(place) {
+            if (place.boundingbox) {
+                const minLat = parseFloat(place.boundingbox[0]);
+                const maxLat = parseFloat(place.boundingbox[1]);
+                const minLon = parseFloat(place.boundingbox[2]);
+                const maxLon = parseFloat(place.boundingbox[3]);
+                if (maxLon >= 106.2 && minLon <= 107.1 && maxLat >= 10.2 && minLat <= 11.4) {
+                    return true;
+                }
+            }
+            const display = place.display_name.toLowerCase();
+            return display.includes("hồ chí minh") || display.includes("ho chi minh") || display.includes("tphcm");
         }
 
-        document.getElementById("startLocation")
-        .addEventListener("input", function(){
+        // Hàm tính điểm ưu tiên (cao hơn = hiển thị trước)
+        function getPlacePriority(place, keyword) {
+            let score = 0;
+            const addr = place.address || {};
+            const hasNumber = addr.house_number ? true : false;
+            const hasRoad = addr.road ? true : false;
+            
+            // Lấy số từ keyword (ví dụ "265/4" -> "265")
+            const keywordNumbers = keyword.match(/\d+/g);
+            const keywordNumber = keywordNumbers ? keywordNumbers[0] : null;
+            
+            // 🔥 Ưu tiên cao nhất: có số nhà và số đó khớp với keyword
+            if (hasNumber && keywordNumber && addr.house_number.includes(keywordNumber)) {
+                score += 2000;
+            }
+            // Có cả số nhà và đường (không cần khớp số)
+            else if (hasNumber && hasRoad) {
+                score += 1000;
+            }
+            // Có đường nhưng không số nhà
+            else if (hasRoad) {
+                score += 300;
+            }
+            // Có số nhà nhưng không rõ đường
+            else if (hasNumber) {
+                score += 150;
+            }
+            // Chỉ có phường/xã (không mong muốn)
+            else if (addr.suburb || addr.city_district) {
+                score -= 500;   // trừ rất nặng
+            }
+            else {
+                score -= 300;
+            }
 
-            searchSuggestions(this.value, "startSuggestions");
+            // Độ chính xác từ Nominatim
+            if (place.class === 'place' && place.type === 'house') score += 80;
+            else if (place.type === 'road') score += 30;
+            else if (place.type === 'suburb') score -= 100;
 
-        });
+            // Địa chỉ càng ngắn gọn càng tốt (ưu tiên cụ thể)
+            score -= Math.min(40, place.display_name.length / 4);
+            
+            return score;
+        }
 
-        document.getElementById("endLocation")
-        .addEventListener("input", function(){
+        // Tạo dropdown tùy chỉnh
+        let activeDropdown = null;
 
-            searchSuggestions(this.value, "endSuggestions");
+        function showDropdown(inputElement, items) {
+            if (activeDropdown) activeDropdown.remove();
+            if (!items.length) return;
 
-        });
-        // ==================== GEOCODE ====================
+            const dropdown = document.createElement('div');
+            dropdown.className = 'custom-dropdown';
+            // Ghi đè style để hiển thị đúng
+            dropdown.style.position = 'absolute';
+            dropdown.style.background = 'white';
+            dropdown.style.border = '1px solid #ccc';
+            dropdown.style.maxHeight = '200px';
+            dropdown.style.overflowY = 'auto';
+            dropdown.style.zIndex = '10000';
+            dropdown.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
 
-        function geocodeAddress(address){
+            const rect = inputElement.getBoundingClientRect();
+            dropdown.style.top = (rect.bottom + window.scrollY) + 'px';
+            dropdown.style.left = (rect.left + window.scrollX) + 'px';
+            dropdown.style.width = rect.width + 'px';
 
-            return new Promise((resolve, reject)=>{
-
-                fetch(
-                    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`
-                )
-                .then(res => res.json())
-                .then(data => {
-
-                    if(data.length === 0){
-                        alert("Không tìm thấy địa điểm");
-                        return;
-                    }
-
-                    resolve({
-                        lat: parseFloat(data[0].lat),
-                        lng: parseFloat(data[0].lon)
-                    });
-
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.textContent = item.display_name.split(',')[0]; // hiển thị ngắn
+                div.style.padding = '8px 12px';
+                div.style.cursor = 'pointer';
+                div.style.fontSize = '14px';
+                div.addEventListener('click', () => {
+                    inputElement.value = item.display_name;
+                    dropdown.remove();
+                    activeDropdown = null;
+                    inputElement.dispatchEvent(new Event('input', { bubbles: true }));
                 });
-
+                div.addEventListener('mouseenter', () => div.style.background = '#f0f0f0');
+                div.addEventListener('mouseleave', () => div.style.background = 'white');
+                dropdown.appendChild(div);
             });
 
+            document.body.appendChild(dropdown);
+            activeDropdown = dropdown;
+
+            function closeOnClickOutside(e) {
+                if (!dropdown.contains(e.target) && e.target !== inputElement) {
+                    dropdown.remove();
+                    activeDropdown = null;
+                    document.removeEventListener('click', closeOnClickOutside);
+                }
+            }
+            setTimeout(() => document.addEventListener('click', closeOnClickOutside), 100);
         }
+
+        // Hàm tìm kiếm gợi ý chính
+        async function searchSuggestions(keyword, listId) {
+            if (!keyword || keyword.length < 2) {
+                if (activeDropdown) activeDropdown.remove();
+                return;
+            }
+
+            if (suggestionCache[keyword]) {
+                const input = document.getElementById(listId === 'startList' ? 'startLocation' : 'endLocation');
+                showDropdown(input, suggestionCache[keyword]);
+                return;
+            }
+
+            let searchKeyword = keyword.trim();
+            searchKeyword = searchKeyword.replace(/[^\w\s\u00C0-\u1EF9\/]/g, '');
+            if (searchKeyword === "") return;
+
+            const viewbox = "106.0,11.5,107.2,10.2";
+            const url = `/api/proxy/nominatim/search/?q=${encodeURIComponent(searchKeyword)}&limit=50&countrycodes=vn&bounded=1&viewbox=${viewbox}&addressdetails=1`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                if (!Array.isArray(data)) return;
+
+                // Lọc trong TP.HCM
+                let filtered = data.filter(place => isInHCM(place));
+
+                // 🔥 Bộ lọc chính: nếu từ khóa có chứa số (ví dụ "265")
+                const hasNumberInKeyword = /\d/.test(keyword);
+                if (hasNumberInKeyword) {
+                    // Chỉ giữ những địa chỉ có chứa số trong display_name (và có house_number hoặc road)
+                    filtered = filtered.filter(place => {
+                        const display = place.display_name;
+                        if (!/\d/.test(display)) return false;
+                        const addr = place.address || {};
+                        return addr.house_number || addr.road;
+                    });
+                } else {
+                    // Nếu không có số, vẫn ưu tiên có road
+                    filtered = filtered.filter(place => {
+                        const addr = place.address || {};
+                        return addr.road || addr.house_number;
+                    });
+                }
+
+                // Sắp xếp theo điểm ưu tiên
+                filtered.sort((a, b) => getPlacePriority(b, keyword) - getPlacePriority(a, keyword));
+
+                // Giới hạn 6 kết quả (để gọn)
+                const topResults = filtered.slice(0, 6);
+                suggestionCache[keyword] = topResults;
+
+                const input = document.getElementById(listId === 'startList' ? 'startLocation' : 'endLocation');
+                showDropdown(input, topResults);
+            } catch (e) {
+                console.error("Lỗi autocomplete:", e);
+            }
+        }
+
+        let debounceTimerStart, debounceTimerEnd;
+
+        document.getElementById("startLocation").addEventListener("input", function() {
+            clearTimeout(debounceTimerStart);
+            debounceTimerStart = setTimeout(() => {
+                searchSuggestions(this.value, "startList");
+            }, 500);
+        });
+        
+        document.getElementById("endLocation").addEventListener("input", function() {
+            clearTimeout(debounceTimerEnd);
+            debounceTimerEnd = setTimeout(() => {
+                searchSuggestions(this.value, "endList");
+            }, 500);
+        });
+
+        document.getElementById("closeRouteBtn").addEventListener("click", function() {
+            safeRemoveRouting();           
+            document.getElementById("routeBox").style.display = "none";
+            document.getElementById("routeInfo").innerHTML = ""; 
+        });
+
+        document.getElementById("openRouteBox").onclick = function() {
+            const box = document.getElementById("routeBox");
+            box.style.display = box.style.display === "none" ? "block" : "none";
+        };
+        document.getElementById("endLocation").addEventListener("input", autoClearRouteOnEmpty);
+
+        document.getElementById("useMyLocationBtn").addEventListener("click", function() {
+            if (!navigator.geolocation) {
+                alert("Trình duyệt không hỗ trợ định vị");
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(async function(position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                try {
+                    const url = `/api/proxy/nominatim/reverse/?lat=${lat}&lon=${lng}`;
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    const displayName = data.display_name || `${lat}, ${lng}`;
+                    document.getElementById("startLocation").value = displayName;
+                } catch (err) {
+                    console.log(err);
+                    document.getElementById("startLocation").value = `${lat}, ${lng}`;
+                }
+            }, function(error) {
+                alert("Không thể lấy vị trí: " + error.message);
+            });
+        });
     });
 </script>
 {% endblock %}

@@ -1,171 +1,171 @@
-<!DOCTYPE html>
-<html>
+    <!DOCTYPE html>
+    <html>
 
-    <head>
+        <head>
 
-        <title>WEBGIS GIÁM SÁT NƯỚC SÀI GÒN</title>
+            <title>WEBGIS GIÁM SÁT NƯỚC SÀI GÒN</title>
 
-        <!-- LEAFLET -->
-        <link rel="stylesheet"
-            href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+            <!-- LEAFLET -->
+            <link rel="stylesheet"
+                href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
-        <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+            <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 
-        <!-- HEATMAP -->
-        <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+            <!-- HEATMAP -->
+            <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 
 
-        <!-- MARKER CLUSTER -->
-        <link rel="stylesheet"
-            href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css"/>
+            <!-- MARKER CLUSTER -->
+            <link rel="stylesheet"
+                href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css"/>
 
-        <link rel="stylesheet"
-            href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css"/>
+            <link rel="stylesheet"
+                href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css"/>
 
-        <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+            <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 
 
-        <!-- ANT PATH -->
-        <script src="https://cdn.jsdelivr.net/npm/leaflet-ant-path@1.3.0/dist/leaflet-ant-path.min.js"></script>
+            <!-- ANT PATH -->
+            <script src="https://cdn.jsdelivr.net/npm/leaflet-ant-path@1.3.0/dist/leaflet-ant-path.min.js"></script>
 
 
-        <!-- GEORASTER -->
-        <script src="https://unpkg.com/georaster@1.5.1"></script>
+            <!-- GEORASTER -->
+            <script src="https://unpkg.com/georaster@1.5.1"></script>
 
-        <script src="https://unpkg.com/georaster-layer-for-leaflet@3.3.0"></script>
+            <script src="https://unpkg.com/georaster-layer-for-leaflet@3.3.0"></script>
 
 
-        <!-- ROUTING MACHINE -->
-        <link rel="stylesheet"
-            href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css"/>
+            <!-- ROUTING MACHINE -->
+            <link rel="stylesheet"
+                href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css"/>
 
-        <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+            <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
 
 
-        <!-- GEOCODER -->
-        <link rel="stylesheet"
-            href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css"/>
+            <!-- GEOCODER -->
+            <link rel="stylesheet"
+                href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css"/>
 
-        <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+            <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
-        <link rel="stylesheet"
-            href="https://unpkg.com/leaflet-geosearch@3.8.0/dist/geosearch.css"/>
+            <link rel="stylesheet"
+                href="https://unpkg.com/leaflet-geosearch@3.8.0/dist/geosearch.css"/>
 
-        <script src="https://unpkg.com/leaflet-geosearch@3.8.0/dist/bundle.min.js"></script>
+            <script src="https://unpkg.com/leaflet-geosearch@3.8.0/dist/bundle.min.js"></script>
 
-        <style>
+            <style>
 
-            body{
-                margin:0;
-                padding:0;
-            }
+                body{
+                    margin:0;
+                    padding:0;
+                }
 
-            #map{
-                height:100vh;
-                width:100%;
-            }
+                #map{
+                    height:100vh;
+                    width:100%;
+                }
 
-            /* ROUTING PANEL */
-            .leaflet-routing-container{
-                z-index:99999 !important;
-                background:white;
-                border-radius:10px;
-                padding:10px;
-            }
+                /* ROUTING PANEL */
+                .leaflet-routing-container{
+                    z-index:99999 !important;
+                    background:white;
+                    border-radius:10px;
+                    padding:10px;
+                }
 
-            /* BUTTON TÌM ĐƯỜNG */
-            #routeBtn{
-                position:absolute;
-                top:10px;
-                left:60px;
-                z-index:9999;
+                /* BUTTON TÌM ĐƯỜNG */
+                #routeBtn{
+                    position:absolute;
+                    top:10px;
+                    left:60px;
+                    z-index:9999;
 
-                padding:10px 15px;
+                    padding:10px 15px;
 
-                background:white;
+                    background:white;
 
-                border:none;
+                    border:none;
 
-                border-radius:10px;
+                    border-radius:10px;
 
-                cursor:pointer;
+                    cursor:pointer;
 
-                box-shadow:0 0 10px rgba(0,0,0,0.3);
+                    box-shadow:0 0 10px rgba(0,0,0,0.3);
 
-                font-weight:bold;
-            }
+                    font-weight:bold;
+                }
 
-            /* BOX NHẬP */
-            #routeBox{
-                display:none;
+                /* BOX NHẬP */
+                #routeBox{
+                    display:none;
 
-                position:absolute;
+                    position:absolute;
 
-                top:60px;
+                    top:60px;
 
-                left:60px;
+                    left:60px;
 
-                z-index:9999;
+                    z-index:9999;
 
-                background:white;
+                    background:white;
 
-                padding:15px;
+                    padding:15px;
 
-                border-radius:10px;
+                    border-radius:10px;
 
-                width:320px;
+                    width:320px;
 
-                box-shadow:0 0 15px rgba(0,0,0,0.3);
-            }
+                    box-shadow:0 0 15px rgba(0,0,0,0.3);
+                }
 
-            #routeBox input{
-                width:100%;
+                #routeBox input{
+                    width:100%;
 
-                padding:10px;
+                    padding:10px;
 
-                margin-bottom:10px;
+                    margin-bottom:10px;
 
-                border:1px solid #ccc;
+                    border:1px solid #ccc;
 
-                border-radius:8px;
+                    border-radius:8px;
 
-                box-sizing:border-box;
-            }
+                    box-sizing:border-box;
+                }
 
-            #routeBox button{
-                width:100%;
+                #routeBox button{
+                    width:100%;
 
-                padding:10px;
+                    padding:10px;
 
-                border:none;
+                    border:none;
 
-                background:#007bff;
+                    background:#007bff;
 
-                color:white;
+                    color:white;
 
-                border-radius:8px;
+                    border-radius:8px;
 
-                cursor:pointer;
-            }
+                    cursor:pointer;
+                }
 
-            #routeInfo{
-                margin-top:10px;
+                #routeInfo{
+                    margin-top:10px;
 
-                font-weight:bold;
-            }
+                    font-weight:bold;
+                }
 
-        </style>
+            </style>
 
-    </head>
+        </head>
 
-    <body>
+        <body>
 
-        {% block content %}
+            {% block content %}
 
-        {% endblock %}
+            {% endblock %}
 
-    </body>
+        </body>
 
-</html>
+    </html>
 
