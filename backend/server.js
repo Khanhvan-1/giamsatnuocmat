@@ -230,6 +230,105 @@ app.get('/api/reports/latest', async (req, res) => {
   }
 });
 
+/* =========================================================
+   6) ĐĂNG KÝ
+========================================================= */
+app.post('/api/register', async (req, res) => {
+
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Thiếu thông tin'
+    });
+  }
+
+  try {
+
+    const checkUser = await pool.query(
+      'SELECT * FROM users WHERE username = $1',
+      [username]
+    );
+
+    if (checkUser.rows.length > 0) {
+      return res.json({
+        success: false,
+        message: 'Tên đăng nhập đã tồn tại'
+      });
+    }
+
+    await pool.query(
+      'INSERT INTO users(username,password) VALUES($1,$2)',
+      [username, password]
+    );
+
+    res.json({
+      success: true,
+      message: 'Đăng ký thành công'
+    });
+
+  } catch (err) {
+
+    console.error('❌ Register error:', err);
+
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+
+  }
+
+});
+
+
+/* =========================================================
+   7) ĐĂNG NHẬP
+========================================================= */
+app.post('/api/login', async (req, res) => {
+
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Thiếu thông tin'
+    });
+  }
+
+  try {
+
+    const result = await pool.query(
+      'SELECT * FROM users WHERE username = $1 AND password = $2',
+      [username, password]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({
+        success: false,
+        message: 'Sai tài khoản hoặc mật khẩu'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Đăng nhập thành công'
+    });
+
+  } catch (err) {
+
+    console.error('❌ Login error:', err);
+
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+
+  }
+
+});
+
+
 app.listen(port, () => {
   console.log(`✅ Server running at http://localhost:${port}`);
 });
