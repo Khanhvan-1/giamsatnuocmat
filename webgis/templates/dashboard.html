@@ -7,6 +7,7 @@
 
 <div class="wqi-bar"></div>
 <div class="export-buttons">
+    <button id="logoutBtn"> Đăng xuất</button>
     <button onclick="exportWarningsExcel()"> Xuất Excel</button>
     <button onclick="exportWarningsHTML()"> Xuất báo cáo HTML</button>
 </div>
@@ -827,6 +828,27 @@
         display: flex;
         flex-direction: column;
     }
+
+    #logoutBtn{
+        position: fixed;
+        top: 15px;
+        right: 15px;
+        z-index: 99999;
+
+        background: #dc2626;
+        color: white;
+        border: none;
+
+        padding: 10px 18px;
+        border-radius: 8px;
+
+        cursor: pointer;
+        font-weight: bold;
+    }
+
+    #logoutBtn:hover{
+        background: #b91c1c;
+    }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -842,6 +864,9 @@
     let warningExpanded = false;
     let warnings = [];  
     let warningSegments = [];
+    if(localStorage.getItem("isLogin") !== "true"){
+    window.location.href = "/login/";
+    }
 
     // Mở rộng danh sách nguồn ô nhiễm không gian (có thể thêm nếu cần)
     const spatialPollutionSources = [
@@ -1571,6 +1596,14 @@
         loadChatHistory();
     }
     loadChatHistory();
+
+        document.getElementById("logoutBtn").addEventListener("click", function(){
+
+        localStorage.removeItem("isLogin");
+
+        window.location.href = "/login/";
+
+    });
 </script>
 
 {% endblock %}

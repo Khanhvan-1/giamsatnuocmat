@@ -1,0 +1,236 @@
+
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng nhập</title>
+
+    <style>
+        *{
+            margin:0;
+            padding:0;
+            box-sizing:border-box;
+        }
+
+        body{
+            min-height:100vh;
+            display:flex;
+            justify-content:center;
+            align-items:center;
+
+            background:linear-gradient(
+                135deg,
+                #667eea 0%,
+                #764ba2 100%
+            );
+
+            font-family:'Segoe UI',sans-serif;
+        }
+
+        .container{
+            width:100%;
+            max-width:450px;
+        }
+
+        .card{
+            background:white;
+            padding:40px;
+            border-radius:20px;
+
+            box-shadow:
+            0 15px 40px rgba(0,0,0,.2);
+        }
+
+        h2{
+            text-align:center;
+            margin-bottom:25px;
+            color:#333;
+        }
+
+        input{
+            width:100%;
+            padding:15px;
+            margin-bottom:15px;
+
+            border:2px solid #ddd;
+            border-radius:12px;
+
+            font-size:16px;
+        }
+
+        input:focus{
+            outline:none;
+            border-color:#667eea;
+        }
+
+        button{
+            width:100%;
+            padding:15px;
+
+            border:none;
+            border-radius:12px;
+
+            background:
+            linear-gradient(
+                135deg,
+                #667eea,
+                #764ba2
+            );
+
+            color:white;
+            font-size:16px;
+            font-weight:bold;
+
+            cursor:pointer;
+        }
+
+        button:hover{
+            transform:translateY(-2px);
+        }
+
+        a{
+            color:#667eea;
+            font-weight:bold;
+            text-decoration:none;
+        }
+
+        .footer{
+            text-align:center;
+            margin-top:20px;
+        }
+
+        .success{
+            color:#16a34a;
+            text-align:center;
+            margin-bottom:15px;
+        }
+
+        .error{
+            color:#dc2626;
+            text-align:center;
+            margin-bottom:15px;
+        }
+    </style>
+</head>
+<body>
+
+<body>
+
+    <div class="container">
+
+        <div class="card">
+
+            <h2>Đăng nhập </h2>
+
+            <div id="messageBox"></div>
+
+            <form id="loginForm">
+
+                <input
+                    type="text"
+                    id="username"
+                    placeholder="Tên đăng nhập"
+                    required>
+
+                <input
+                    type="password"
+                    id="password"
+                    placeholder="Mật khẩu"
+                    required>
+
+                <button type="submit">
+                    Đăng nhập
+                </button>
+
+            </form>
+
+            <div class="footer">
+                <a href="/register/">
+                    Chưa có tài khoản? Đăng ký
+                </a>
+            </div>
+
+        </div>
+
+    </div>
+    <script>
+
+        document
+        .getElementById("loginForm")
+        .addEventListener("submit", async function(e){
+
+            e.preventDefault();
+
+            const username =
+                document.getElementById("username").value;
+
+            const password =
+                document.getElementById("password").value;
+
+            try{
+
+                const response =
+                await fetch(
+                    "http://localhost:3000/api/login",
+                    {
+                        method:"POST",
+                        headers:{
+                            "Content-Type":"application/json"
+                        },
+                        body:JSON.stringify({
+                            username,
+                            password
+                        })
+                    }
+                );
+
+                const data =
+                    await response.json();
+
+                const box =
+                    document.getElementById(
+                        "messageBox"
+                    );
+
+                if(data.success){
+
+                    box.innerHTML =
+                    '<div class="success">Đăng nhập thành công</div>';
+
+                    localStorage.setItem(
+                        "isLogin",
+                        "true"
+                    );
+
+                    setTimeout(()=>{
+
+                        window.location.href =
+                            "/map/";
+
+                    },1000);
+
+                }else{
+
+                    box.innerHTML =
+                    '<div class="error">'+
+                    data.message+
+                    '</div>';
+
+                }
+
+            }catch(err){
+
+                document.getElementById(
+                    "messageBox"
+                ).innerHTML =
+                '<div class="error">Không kết nối được server</div>';
+
+            }
+
+        });
+
+    </script>
+
+</body>
+</html>
+

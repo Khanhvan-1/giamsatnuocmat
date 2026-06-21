@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 
 {% block content %}
-
+    <script>
+    if(localStorage.getItem("isLogin") !== "true"){
+        window.location.href = "/login/";
+    }
+    </script>
 <div id="map"></div>
 
 <button id="openRouteBox"> Tìm đường đi</button>

@@ -141,6 +141,11 @@ def map_view(request):
 def dashboard(request):
     return render(request, "dashboard.html")
 
+def login_view(request):
+    return render(request, "login.html")
+
+def register_view(request):
+    return render(request, "register.html")
 
 # =========================
 # CHATBOT

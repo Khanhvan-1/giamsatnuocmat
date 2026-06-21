@@ -1,0 +1,177 @@
+
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng ký</title>
+
+    <style>
+        body{
+            min-height:100vh;
+            display:flex;
+            justify-content:center;
+            align-items:center;
+
+            background:linear-gradient(
+                135deg,
+                #f093fb 0%,
+                #f5576c 100%
+            );
+
+            font-family:'Segoe UI',sans-serif;
+        }
+
+        input{
+            width:100%;
+            padding:10px;
+            margin-bottom:10px;
+        }
+
+        button{
+            background:
+            linear-gradient(
+                135deg,
+                #f093fb,
+                #f5576c
+            );
+        }
+
+        .success{
+            color:green;
+            margin-bottom:10px;
+        }
+
+        .error{
+            color:red;
+            margin-bottom:10px;
+        }
+    </style>
+</head>
+<body>
+     <div class="container">
+
+         <div class="card">
+
+             <h2>🌱 Đăng ký tài khoản</h2>
+
+            <div id="messageBox"></div>
+
+             <form id="registerForm">
+
+                 <input
+                        type="text"
+                        id="username"
+                        placeholder="Tên đăng nhập"
+                        required>
+
+                <input
+                        type="password"
+                        id="password"
+                        placeholder="Mật khẩu"
+                        required>
+
+                 <input
+                        type="password"
+                        id="confirmPassword"
+                        placeholder="Xác nhận mật khẩu"
+                        required>
+
+                <button type="submit">
+                        Đăng ký
+                </button>
+
+            </form>
+
+            <div class="footer">
+                    <a href="/login/">
+                        Quay lại đăng nhập
+                    </a>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+
+        document
+        .getElementById("registerForm")
+        .addEventListener("submit", async function(e){
+
+            e.preventDefault();
+
+            const username =
+                document.getElementById("username").value;
+
+            const password =
+                document.getElementById("password").value;
+
+            const confirmPassword =
+                document.getElementById("confirmPassword").value;
+
+            const box =
+                document.getElementById("messageBox");
+
+            if(password !== confirmPassword){
+
+                box.innerHTML =
+                '<div class="error">Mật khẩu xác nhận không khớp</div>';
+
+                return;
+            }
+
+            try{
+
+                const response =
+                await fetch(
+                    "http://localhost:3000/api/register",
+                    {
+                        method:"POST",
+                        headers:{
+                            "Content-Type":"application/json"
+                        },
+                        body:JSON.stringify({
+                            username,
+                            password
+                        })
+                    }
+                );
+
+                const data =
+                    await response.json();
+
+                if(data.success){
+
+                    box.innerHTML =
+                    '<div class="success">Đăng ký thành công</div>';
+
+                    setTimeout(()=>{
+
+                        window.location.href =
+                            "/login/";
+
+                    },1500);
+
+                }else{
+
+                    box.innerHTML =
+                    '<div class="error">'+
+                    data.message+
+                    '</div>';
+
+                }
+
+            }catch(err){
+
+                box.innerHTML =
+                '<div class="error">Không kết nối được server</div>';
+
+            }
+
+        });
+
+    </script>
+
+</body>
+</html>
+

@@ -3,21 +3,24 @@ from . import views
 
 urlpatterns = [
 
-path('points/',views.get_points),
+    path('login/', views.login_view, name='login'),
 
-path('dashboard/',views.dashboard),
+    path('register/', views.register_view, name='register'),
 
-path("chatbot/", views.chatbot, name="chatbot"),
+    path('points/', views.get_points),
 
-path("chat-history/", views.get_chat_history),
+    path('dashboard/', views.dashboard),
 
-path("clear-chat-history/", views.clear_chat_history),
+    path("chatbot/", views.chatbot, name="chatbot"),
 
-path("api/new-chat/", views.new_chat),
+    path("chat-history/", views.get_chat_history),
 
-path('proxy/nominatim/search/', views.proxy_nominatim_search, name='proxy_search'),
+    path("clear-chat-history/", views.clear_chat_history),
 
-path('proxy/nominatim/reverse/', views.proxy_nominatim_reverse, name='proxy_reverse'),
+    path("api/new-chat/", views.new_chat),
 
+    path('proxy/nominatim/search/', views.proxy_nominatim_search, name='proxy_search'),
 
+    path('proxy/nominatim/reverse/', views.proxy_nominatim_reverse, name='proxy_reverse'),
+    
 ]
