@@ -328,6 +328,238 @@ app.post('/api/login', async (req, res) => {
 
 });
 
+/* =========================================================
+   8) THỐNG KÊ BÁO CÁO
+========================================================= */
+app.get('/api/report-summary', async (req, res) => {
+
+  try {
+
+    const result = await pool.query(`
+      SELECT
+        COUNT(*) AS total_warnings,
+        COUNT(*) FILTER (WHERE polluted_count > 0) AS polluted
+      FROM warnings
+    `);
+
+    res.json(result.rows[0]);
+
+  } catch(err){
+
+    console.error(err);
+
+    res.status(500).json({
+      error: err.message
+    });
+
+  }
+
+});
+
+/* =========================================================
+   9) DANH SÁCH ĐOẠN SÔNG
+========================================================= */
+app.get('/api/rivers', async (req, res) => {
+
+  try {
+
+    const result = await pool.query(`
+      SELECT DISTINCT segment_name
+      FROM warnings
+      ORDER BY segment_name
+    `);
+
+    res.json(result.rows);
+
+  } catch(err){
+
+    res.status(500).json({
+      error: err.message
+    });
+
+  }
+
+});
+
+/* =========================================================
+   TỔNG SỐ CẢNH BÁO
+========================================================= */
+app.get('/api/warnings/count', async (req, res) => {
+
+  try {
+
+    const result = await pool.query(`
+      SELECT COUNT(*) AS total_warnings
+      FROM warnings
+      WHERE polluted_count > 0
+    `);
+
+    res.json({
+      totalWarnings: parseInt(result.rows[0].total_warnings)
+    });
+
+  } catch (err) {
+
+    console.error('❌ Lỗi đếm cảnh báo:', err);
+
+    res.status(500).json({
+      error: err.message
+    });
+
+  }
+
+});
+
+app.post('/api/chat/new', async (req, res) => {
+
+    try {
+
+        const result = await pool.query(`
+            INSERT INTO chat_sessions(title)
+            VALUES ('Chat mới')
+            RETURNING id
+        `);
+
+        res.json({
+            sessionId: result.rows[0].id
+        });
+
+    } catch(err){
+
+        res.status(500).json({
+            error: err.message
+        });
+
+    }
+
+});
+
+app.get('/api/chat/history', async (req, res) => {
+
+    try {
+
+        const result = await pool.query(`
+            SELECT
+                id,
+                title
+            FROM chat_sessions
+            ORDER BY created_at DESC
+        `);
+
+        res.json(result.rows);
+
+    } catch(err){
+
+        res.status(500).json({
+            error: err.message
+        });
+
+    }
+
+});
+
+app.get('/api/chat/:id', async (req, res) => {
+
+    try {
+
+        const result = await pool.query(`
+            SELECT
+                role,
+                content
+            FROM chat_messages
+            WHERE session_id = $1
+            ORDER BY created_at
+        `,
+        [req.params.id]);
+
+        res.json(result.rows);
+
+    } catch(err){
+
+        res.status(500).json({
+            error: err.message
+        });
+
+    }
+
+});
+app.post('/api/chat/message', async (req,res)=>{
+
+    const {
+        sessionId,
+        userMessage,
+        botReply
+    } = req.body;
+
+    try{
+
+        const session = await pool.query(
+            `
+            SELECT title
+            FROM chat_sessions
+            WHERE id = $1
+            `,
+            [sessionId]
+        );
+
+        if(
+            session.rows.length > 0 &&
+            session.rows[0].title === 'Chat mới'
+        ){
+            await pool.query(
+                `
+                UPDATE chat_sessions
+                SET title = $1
+                WHERE id = $2
+                `,
+                [
+                    userMessage.substring(0,50),
+                    sessionId
+                ]
+            );
+        }
+
+        await pool.query(
+            `
+            INSERT INTO chat_messages
+            (session_id,role,content)
+            VALUES ($1,$2,$3)
+            `,
+            [
+                sessionId,
+                'user',
+                userMessage
+            ]
+        );
+
+        await pool.query(
+            `
+            INSERT INTO chat_messages
+            (session_id,role,content)
+            VALUES ($1,$2,$3)
+            `,
+            [
+                sessionId,
+                'assistant',
+                botReply
+            ]
+        );
+
+        res.json({
+            success:true
+        });
+
+    }catch(err){
+
+        console.error(err);
+
+        res.status(500).json({
+            error:err.message
+        });
+
+    }
+
+});
 
 app.listen(port, () => {
   console.log(`✅ Server running at http://localhost:${port}`);
