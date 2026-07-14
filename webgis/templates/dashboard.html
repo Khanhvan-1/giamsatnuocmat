@@ -7,9 +7,23 @@
 
 <div class="wqi-bar"></div>
 <div class="export-buttons">
-    <button id="logoutBtn"> Đăng xuất</button>
-    <button onclick="exportWarningsExcel()"> Xuất Excel</button>
-    <button onclick="exportWarningsHTML()"> Xuất báo cáo HTML</button>
+    <button id="logoutBtn">Đăng xuất</button>
+
+    <button onclick="window.location.href='/map/'">
+        Quay lại bản đồ
+    </button>
+
+    <button onclick="location.href='/api/report/'">
+         Báo cáo thống kê
+    </button>
+
+    <button onclick="exportWarningsExcel()">
+        Xuất Excel
+    </button>
+
+    <button onclick="exportWarningsHTML()">
+        Xuất báo cáo HTML
+    </button>
 </div>
 <div id="timerBox" style="text-align:center; margin:10px;">
      Cập nhật sau: <b id="countdown">60</b>s
@@ -33,6 +47,50 @@
 
         <div id="warningSummaryBox" class="warning-summary-box"></div>
         <div id="warningList" class="warning-list-box"></div>
+    </div>
+
+    <div id="warningModal" class="warning-modal">
+
+        <div class="warning-modal-content">
+
+            <span class="close-modal"
+                onclick="closeWarningModal()">&times;</span>
+
+            <h2>⚠ Chi tiết cảnh báo ô nhiễm</h2>
+
+            <div class="detail-row">
+                <b>Vị trí:</b>
+                <span id="modalLocation"></span>
+            </div>
+
+            <div class="detail-row">
+                <b>Mức độ ô nhiễm:</b>
+                <span id="modalPriority"></span>
+            </div>
+
+            <div class="detail-row">
+                <b>Chỉ số vượt ngưỡng:</b>
+                <span id="modalIssues"></span>
+            </div>
+
+            <div class="detail-row">
+                <b>Mức cảnh báo:</b>
+                <span id="modalLevel"></span>
+            </div>
+
+            <div class="detail-row">
+                <b>Thời gian:</b>
+                <span id="modalTime"></span>
+            </div>
+
+            <hr>
+
+            <button id="viewMapBtn">
+                🗺️ Xem trên bản đồ
+            </button>
+
+        </div>
+
     </div>
 
     <div class="card">
@@ -788,14 +846,6 @@
         overflow: hidden;
     }
 
-    /* Cột lịch sử */
-    #chatHistoryPanel{
-        width: 180px;
-        border-right: 1px solid #ddd;
-        background: #f8fafc;
-        padding: 10px;
-        overflow-y: auto;
-    }
 
     #chatHistoryPanel h4{
         margin-top: 0;
@@ -803,24 +853,6 @@
         color: #2563eb;
     }
 
-    /* từng dòng lịch sử */
-    .history-item{
-        padding: 10px;
-        margin-bottom: 8px;
-        background: white;
-        border-radius: 10px;
-        cursor: pointer;
-        font-size: 13px;
-        border: 1px solid #ddd;
-
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .history-item:hover{
-        background: #dbeafe;
-    }
 
     /* phần chat bên phải */
     #chatMain{
@@ -849,6 +881,79 @@
     #logoutBtn:hover{
         background: #b91c1c;
     }
+
+    .warning-modal{
+        display:none;
+        position:fixed;
+        z-index:99999;
+
+        left:0;
+        top:0;
+
+        width:100%;
+        height:100%;
+
+        background:rgba(0,0,0,.5);
+    }
+
+    .warning-modal-content{
+
+        width:600px;
+
+        max-width:90%;
+
+        margin:80px auto;
+
+        background:white;
+
+        padding:25px;
+
+        border-radius:16px;
+
+        box-shadow:0 10px 30px rgba(0,0,0,.2);
+    }
+
+    .close-modal{
+        float:right;
+        font-size:30px;
+        cursor:pointer;
+    }
+
+    .detail-row{
+        margin:12px 0;
+    }
+
+    #viewMapBtn{
+        margin-top:15px;
+
+        padding:12px 20px;
+
+        background:#0d6efd;
+        color:white;
+
+        border:none;
+        border-radius:10px;
+
+        cursor:pointer;
+    }
+
+    #chatHistoryPanel{
+        width:220px;
+        overflow-y:auto;
+        border-right:1px solid #ddd;
+    }
+
+    .history-item{
+        padding:10px;
+        margin:5px;
+        border-radius:8px;
+        cursor:pointer;
+    }
+
+    .history-item:hover{
+        background:#ececf1;
+    }
+
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -978,7 +1083,7 @@
             // Escape JSON để truyền vào onclick
             const segJson = JSON.stringify(seg).replace(/"/g, '&quot;');
             return `
-                <div class="warning-block ${getPriorityColorClass(seg.priority)}" onclick="zoomToSegment(${segJson})" style="cursor:pointer;">
+                <div class="warning-block ${getPriorityColorClass(seg.priority)}" onclick="showWarningModal(${segJson})" style="cursor:pointer;">
                     <h4>${dangerIcon} ${seg.location}</h4>
                     <div class="warning-big-text">${buildBigWarningParagraph(seg)}</div>
                     <div class="warning-meta">
@@ -1457,8 +1562,48 @@
         if (collapseBtn) collapseBtn.addEventListener("click", () => { warningExpanded = false; renderWarningCards(warningSegments); });
     });
 
+    let selectedWarning = null;
 
+    function showWarningModal(seg){
+
+        selectedWarning = seg;
+
+        document.getElementById("modalLocation").innerText =
+            seg.location || "Không xác định";
+
+        document.getElementById("modalPriority").innerText =
+            seg.priority || "Trung bình";
+
+        document.getElementById("modalIssues").innerText =
+            (seg.issues || []).join(", ");
+
+        document.getElementById("modalLevel").innerText =
+            seg.priority || "Trung bình";
+
+        document.getElementById("modalTime").innerText =
+            seg.report_date
+                ? new Date(seg.report_date).toLocaleString()
+                : "Không có dữ liệu";
+
+        document.getElementById("warningModal").style.display =
+            "block";
+    }
+
+    function closeWarningModal(){
+
+        document.getElementById("warningModal").style.display =
+            "none";
+    }
+
+    let currentSessionId = null;
     async function sendMessage() {
+        
+        if(!currentSessionId){
+
+            await startNewChat();
+
+        }
+
         const input = document.getElementById("chatInput");
         const message = input.value.trim();
 
@@ -1498,15 +1643,33 @@
 
             const result = await response.json();
 
+            const saveRes = await fetch(
+                "http://localhost:3000/api/chat/message",
+                {
+                    method:"POST",
+                    headers:{
+                        "Content-Type":"application/json"
+                    },
+                    body:JSON.stringify({
+                        sessionId: currentSessionId,
+                        userMessage: message,
+                        botReply: result.reply
+                    })
+                }
+            );
+
+            await loadChatHistory();
+
             // hiện câu trả lời bot
             chatBox.innerHTML += `
                 <div class="bot-message">
                     ${result.reply}
                 </div>
             `;
-
+            
             // kéo xuống cuối
-            chatBox.scrollTop = chatBox.scrollHeight;
+            chatBox.scrollTop =
+                chatBox.scrollHeight;
 
         } catch (error) {
             console.log("Lỗi:", error);
@@ -1520,64 +1683,85 @@
     }
 
     function toggleChat(){
-        const box = document.getElementById("chatbox");
+
+        const box =
+            document.getElementById("chatbox");
+
         box.classList.toggle("hidden");
+
+        if(!box.classList.contains("hidden")){
+            loadChatHistory();
+        }
     }
 
-    async function loadChatHistory() {
-        const res = await fetch("/api/chat-history/");
-        const history = await res.json();
+    async function loadChatHistory(){
+
+        const res = await fetch(
+            "http://localhost:3000/api/chat/history"
+        );
+
+        const history =
+            await res.json();
 
         const historyList =
-            document.getElementById("historyList");
+            document.getElementById(
+                "historyList"
+            );
 
         historyList.innerHTML = "";
 
-        history.forEach((chat, index) => {
-
-            let title = chat.title;
-
-            if(title.length > 25){
-                title = title.substring(0,25) + "...";
-            }
+        history.forEach(chat => {
 
             historyList.innerHTML += `
-                <div class="history-item"
-                    onclick="openOldChat(${index})">
-                    ${title}
+                <div
+                    class="history-item"
+                    onclick="openOldChat(${chat.id})">
+
+                    💬 ${chat.title}
+
                 </div>
             `;
         });
     }
 
 
-    async function openOldChat(index){
+    async function openOldChat(id){
+
+        currentSessionId = id;
+
         const res =
-            await fetch("/api/chat-history/");
-        const history =
+            await fetch(
+                `http://localhost:3000/api/chat/${id}`
+            );
+
+        const messages =
             await res.json();
 
         const chatBox =
-            document.getElementById("chatMessages");
+            document.getElementById(
+                "chatMessages"
+            );
 
         chatBox.innerHTML = "";
 
-        const messages =
-            history[index].messages;
-
         messages.forEach(msg => {
 
-            chatBox.innerHTML += `
-                <div class="user-msg">
-                    ${msg.user}
-                </div>
-            `;
+            if(msg.role === "user"){
 
-            chatBox.innerHTML += `
-                <div class="bot-msg">
-                    ${msg.bot}
-                </div>
-            `;
+                chatBox.innerHTML += `
+                    <div class="user-message">
+                        ${msg.content}
+                    </div>
+                `;
+
+            }else{
+
+                chatBox.innerHTML += `
+                    <div class="bot-message">
+                        ${msg.content}
+                    </div>
+                `;
+            }
         });
 
         chatBox.scrollTop =
@@ -1585,16 +1769,29 @@
     }
     
     async function startNewChat(){
-        await fetch("/api/new-chat/", {
-            method:"POST"
-        });
+
+        const res = await fetch(
+            "http://localhost:3000/api/chat/new",
+            {
+                method:"POST"
+            }
+        );
+
+        const data = await res.json();
+
+        currentSessionId = data.sessionId;
 
         document.getElementById(
             "chatMessages"
-        ).innerHTML = "";
+        ).innerHTML = `
+            <div class="bot-msg">
+                Xin chào 👋
+            </div>
+        `;
 
         loadChatHistory();
     }
+
     loadChatHistory();
 
         document.getElementById("logoutBtn").addEventListener("click", function(){
@@ -1604,6 +1801,56 @@
         window.location.href = "/login/";
 
     });
+
+    document.getElementById("viewMapBtn")
+    .addEventListener("click", function(){
+
+        if(!selectedWarning) return;
+
+        const params = [];
+
+        if(
+            selectedWarning.startLat != null &&
+            selectedWarning.startLng != null &&
+            selectedWarning.endLat != null &&
+            selectedWarning.endLng != null
+        ){
+            params.push(
+                `bounds=${selectedWarning.startLat},${selectedWarning.startLng},${selectedWarning.endLat},${selectedWarning.endLng}`
+            );
+        }
+
+        if(
+            selectedWarning.coords &&
+            selectedWarning.coords.length > 0
+        ){
+            const coordsStr = selectedWarning.coords
+                .map(c => `${c.lat},${c.lng}`)
+                .join(";");
+
+            params.push(
+                `coords=${encodeURIComponent(coordsStr)}`
+            );
+        }
+
+        const issueText = encodeURIComponent(
+            (selectedWarning.issues || []).join(", ")
+        );
+
+        params.push(
+            `priority=${encodeURIComponent(selectedWarning.priority || "")}`
+        );
+
+        params.push(
+            `issues=${issueText}`
+        );
+
+        const url = "/map/?" + params.join("&");
+
+        window.location.href = url;
+    });
+     loadChatHistory();
+
 </script>
 
 {% endblock %}

@@ -1,0 +1,1037 @@
+<html lang="vi">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Báo cáo thống kê chất lượng nước</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+body{
+    margin:0;
+    padding:20px;
+    font-family:Arial,sans-serif;
+    background:#f4f7fb;
+}
+
+.header{
+    display:flex;
+    gap:10px;
+    margin-bottom:20px;
+}
+
+.btn{
+    border:none;
+    padding:10px 20px;
+    border-radius:8px;
+    cursor:pointer;
+    color:white;
+}
+
+.btn-map{
+    background:#3498db;
+}
+
+.btn-dashboard{
+    background:#27ae60;
+}
+
+.btn-export{
+    background:#f39c12;
+}
+
+.panel{
+
+    background:white;
+    padding:20px;
+    border-radius:12px;
+    margin-bottom:20px;
+
+    box-shadow:
+    0 2px 10px rgba(0,0,0,0.1);
+}
+
+.row{
+
+    display:flex;
+    gap:15px;
+    flex-wrap:wrap;
+    margin-bottom:15px;
+}
+
+input,
+select{
+
+    padding:10px;
+    border:1px solid #ccc;
+    border-radius:8px;
+}
+
+.quick-stats{
+
+    display:grid;
+
+    grid-template-columns:
+    repeat(auto-fit,minmax(220px,1fr));
+
+    gap:15px;
+}
+
+.stat-card{
+
+    background:white;
+    border-radius:12px;
+
+    text-align:center;
+
+    padding:20px;
+
+    box-shadow:
+    0 2px 8px rgba(0,0,0,0.1);
+}
+
+.stat-card h2{
+    margin:0;
+    color:#2980b9;
+}
+
+table{
+
+    width:100%;
+    border-collapse:collapse;
+}
+
+table th,
+table td{
+
+    border:1px solid #ddd;
+    padding:10px;
+}
+
+table th{
+    background:#2980b9;
+    color:white;
+}
+
+.chart-box{
+
+    background:white;
+
+    padding:20px;
+
+    border-radius:12px;
+
+    margin-top:20px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="header">
+
+<button
+class="btn btn-map"
+onclick="location.href='/map/'">
+
+ Quay lại bản đồ
+
+</button>
+
+<button
+class="btn btn-dashboard"
+onclick="location.href='/dashboard/'">
+
+ Dashboard
+
+</button>
+
+<button
+class="btn btn-export"
+onclick="exportExcel()">
+
+ Xuất Excel
+
+</button>
+
+<button
+class="btn btn-export"
+onclick="exportHTML()">
+
+ Xuất HTML
+
+</button>
+
+</div>
+
+<div class="panel">
+
+<h2>📅 Bộ lọc báo cáo</h2>
+<p id="reportTime"></p>
+<div class="row">
+
+<label>Từ ngày</label>
+
+<input
+type="date"
+id="fromDate">
+
+<label>Đến ngày</label>
+
+<input
+type="date"
+id="toDate">
+
+</div>
+
+<div class="row">
+
+    <select id="pollutionFilter">
+        
+        <option value="">
+            Tất cả mức độ ô nhiễm
+        </option>
+
+        <option value="normal">
+            Bình thường
+        </option>
+
+        <option value="medium">
+            Trung bình
+        </option>
+
+        <option value="high">
+            Cao
+        </option>
+
+        <option value="veryhigh">
+            Rất cao
+        </option>
+        </select>
+    <select id="riverFilter">
+
+        <option value="">
+            Tất cả đoạn sông
+        </option>
+
+    </select>
+
+    <button
+        class="btn btn-dashboard"
+        onclick="generateReport()">
+
+        📈 Lấy dữ liệu
+
+    </button>
+
+</div>
+
+</div>
+
+<div class="quick-stats">
+<div class="stat-card">
+
+<h2 id="normalArea">0</h2>
+
+<p>Vùng bình thường</p>
+
+</div>
+<div class="stat-card">
+
+<h2 id="totalPoints">0</h2>
+
+<p>Tổng điểm quan trắc</p>
+
+</div>
+
+<div class="stat-card">
+
+<h2 id="pollutedPoints">0</h2>
+
+<p>Điểm ô nhiễm</p>
+
+</div>
+
+<div class="stat-card">
+
+<h2 id="totalWarnings">0</h2>
+
+<p>Tổng cảnh báo</p>
+
+</div>
+
+<div class="stat-card">
+
+<h2 id="pollutionRate">0%</h2>
+
+<p>Tỷ lệ ô nhiễm</p>
+
+</div>
+
+</div>
+
+<div class="panel">
+
+<h2>Bảng thống kê</h2>
+
+<table id="summaryTable">
+
+<thead>
+
+<tr>
+
+<th>Chỉ tiêu</th>
+
+<th>Giá trị</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+<td>Tổng điểm quan trắc</td>
+<td id="tbTotal">0</td>
+</tr>
+
+<tr>
+<td>Điểm ô nhiễm</td>
+<td id="tbPolluted">0</td>
+</tr>
+
+<tr>
+<td>Cảnh báo cao</td>
+<td id="tbHigh">0</td>
+</tr>
+
+<tr>
+<td>Cảnh báo rất cao</td>
+<td id="tbVeryHigh">0</td>
+</tr>
+
+<tr>
+<td>Vùng bình thường</td>
+<td id="tbNormal">0</td>
+</tr>
+
+</tbody>
+
+</table>
+
+</div>
+<div class="panel">
+
+<h2>
+ Danh sách cảnh báo
+</h2>
+
+<table id="warningTable">
+
+<thead>
+
+<tr>
+
+<th>Đoạn sông</th>
+<th>pH</th>
+<th>DO</th>
+<th>BOD5</th>
+<th>COD</th>
+<th>NH4</th>
+<th>Coliform</th>
+
+</tr>
+
+</thead>
+
+<tbody id="warningBody"></tbody>
+
+</table>
+
+</div>
+
+<div class="panel">
+
+<h2>
+Lịch sử báo cáo
+</h2>
+
+<table id="historyTable">
+
+<thead>
+
+<tr>
+
+<th>ID</th>
+<th>Đoạn sông</th>
+<th>Ngày báo cáo</th>
+<th>Số chỉ tiêu vượt chuẩn</th>
+
+</tr>
+
+</thead>
+
+<tbody id="historyBody">
+
+</tbody>
+
+</table>
+
+</div>
+
+<div class="panel">
+
+<h2>Nhận xét báo cáo</h2>
+
+<div id="reportComment">
+
+Chưa có dữ liệu
+
+</div>
+
+</div>
+
+<div class="chart-box">
+
+<h2>Biểu đồ cột mức độ ô nhiễm</h2>
+
+<canvas id="barChart"></canvas>
+
+</div>
+
+<div class="chart-box">
+
+<h2>Biểu đồ tròn cảnh báo</h2>
+
+<canvas id="pieChart"></canvas>
+
+</div>
+
+<div class="chart-box">
+
+<h2>Biểu đồ đường COD - NH4 - BOD5</h2>
+
+<canvas id="lineChart"></canvas>
+
+</div>
+
+<script>
+
+    let barChart;
+    let pieChart;
+    let lineChart;
+
+    async function generateReport(){
+        const fromDate =
+        document.getElementById("fromDate").value;
+
+        const toDate =
+        document.getElementById("toDate").value;
+
+        if(!fromDate || !toDate){
+            alert("Vui lòng chọn từ ngày và đến ngày");
+            return;
+        }
+
+        const river =
+        document.getElementById("riverFilter").value;
+
+        const level =
+        document.getElementById("pollutionFilter").value;
+        
+        const reportRes =
+        await fetch(
+        `/api/report-data/?from_date=${encodeURIComponent(fromDate)}&to_date=${encodeURIComponent(toDate)}&river=${encodeURIComponent(river)}&level=${encodeURIComponent(level)}`
+        );
+
+        if (!reportRes.ok) {
+            alert("Không lấy được dữ liệu báo cáo");
+            return;
+        }
+        const report =
+        await reportRes.json();
+
+        document.getElementById(
+            "totalPoints"
+        ).innerText = report.total;
+
+        document.getElementById(
+            "pollutedPoints"
+        ).innerText = report.polluted;
+
+        document.getElementById(
+            "totalWarnings"
+        ).innerText =
+        (report.high_warning || 0) +
+        (report.very_high_warning || 0);
+
+        document.getElementById(
+            "pollutionRate"
+        ).innerText =
+        (report.rate || 0) + "%";
+
+        let comment = "";
+
+        if(report.rate < 20){
+
+            comment =
+            "Chất lượng nước tương đối tốt.";
+
+        }
+        else if(report.rate < 50){
+
+            comment =
+            "Có dấu hiệu ô nhiễm cục bộ.";
+
+        }
+        else{
+
+            comment =
+            "Mức độ ô nhiễm cao, cần giám sát.";
+
+        }
+
+        document.getElementById(
+        "reportComment"
+        ).innerHTML =
+        comment;
+
+        document.getElementById(
+            "tbTotal"
+        ).innerText =
+        report.total;
+
+        document.getElementById(
+            "tbPolluted"
+        ).innerText =
+        report.polluted;
+
+        document.getElementById(
+            "tbNormal"
+        ).innerText =
+        report.normal;
+
+        document.getElementById(
+            "normalArea"
+        ).innerText =
+        report.normal;
+
+        document.getElementById(
+        "tbHigh"
+        ).innerText =
+        report.high_warning || 0;
+
+        document.getElementById(
+        "tbVeryHigh"
+        ).innerText =
+        report.very_high_warning || 0;
+
+        drawCharts(
+            report.total || 0,
+            report.polluted || 0,
+            report.normal || 0,
+            report.rows || []
+        );
+        const body =
+        document.getElementById(
+            "warningBody"
+        );
+
+        body.innerHTML = "";
+
+        if(!Array.isArray(report.rows)){
+            report.rows = [];
+        }
+        report.rows.forEach(r=>{
+
+            body.innerHTML += `
+            <tr>
+
+                <td>${r.segment}</td>
+                <td>${r.ph}</td>
+                <td>${r.do}</td>
+                <td>${r.bod5}</td>
+                <td>${r.cod}</td>
+                <td>${r.nh4}</td>
+                <td>${r.coliform}</td>
+
+            </tr>
+            `;
+        });
+        await loadHistory();
+    }
+
+    function drawCharts(
+        total,
+        polluted,
+        normal,
+        data
+    ){
+        data = Array.isArray(data) 
+        ?data = data.slice(0,100):[];
+        if(barChart)
+        barChart.destroy();
+
+        if(pieChart)
+        pieChart.destroy();
+
+        if(lineChart)
+        lineChart.destroy();
+
+        barChart = new Chart(
+            document.getElementById("barChart"),
+            {
+                type:"bar",
+                data:{
+                    labels:["Ô nhiễm","Bình thường"],
+                    datasets:[{
+                        label:"Số lượng",
+                        data:[polluted, normal]
+                    }]
+                },
+                options:{
+                    plugins:{
+                        title:{
+                            display:true,
+                            text:"Thống kê mức độ ô nhiễm"
+                        }
+                    }
+                }
+            }
+        );
+
+        pieChart = new Chart(
+            document.getElementById("pieChart"),
+            {
+                type:"pie",
+                data:{
+                    labels:["Ô nhiễm","Bình thường"],
+                    datasets:[{
+                        data:[polluted, normal]
+                    }]
+                },
+                options:{
+                    plugins:{
+                        title:{
+                            display:true,
+                            text:"Phân bố cảnh báo"
+                        }
+                    }
+                }
+            }
+        );
+
+        lineChart = new Chart(
+            document.getElementById("lineChart"),
+            {
+                type:"line",
+                data:{
+                    labels:data.map(x=>x.segment),
+                    datasets:[
+                    {
+                        label:"COD",
+                        data:data.map(x=>x.cod)
+                    },
+                    {
+                        label:"NH4",
+                        data:data.map(x=>x.nh4)
+                    },
+                    {
+                        label:"BOD5",
+                        data:data.map(x=>x.bod5)
+                    }]
+                },
+                options:{
+                    plugins:{
+                        title:{
+                            display:true,
+                            text:"Biến động COD - NH4 - BOD5"
+                        }
+                    }
+                }
+            }
+        );
+    }
+
+    function exportHTML(){
+
+        const barImage =
+        document.getElementById("barChart")
+        .toDataURL("image/png");
+
+        const pieImage =
+        document.getElementById("pieChart")
+        .toDataURL("image/png");
+
+        const lineImage =
+        document.getElementById("lineChart")
+        .toDataURL("image/png");
+
+        let report = `
+        <html>
+
+        <head>
+
+        <meta charset="UTF-8">
+
+        <title>Báo cáo thống kê chất lượng nước</title>
+
+        <style>
+
+        body{
+            font-family:"Times New Roman";
+            font-size:13pt;
+            padding:30px;
+        }
+
+        h1,h2{
+            text-align:center;
+        }
+
+        table{
+            width:100%;
+            border-collapse:collapse;
+            margin-top:10px;
+        }
+
+        th,td{
+            border:1px solid black;
+            padding:8px;
+            text-align:center;
+        }
+
+        th{
+            background:#d9d9d9;
+        }
+
+        img{
+            display:block;
+            margin:20px auto;
+            max-width:900px;
+        }
+
+        </style>
+
+        </head>
+
+        <body>
+
+        <h1>
+        BÁO CÁO THỐNG KÊ CHẤT LƯỢNG NƯỚC
+        </h1>
+
+        <p>
+        Thời gian lập báo cáo:
+        ${new Date().toLocaleString()}
+        </p>
+
+        <h2>
+        THỐNG KÊ TỔNG HỢP
+        </h2>
+
+        ${document.getElementById("summaryTable").outerHTML}
+
+        <h2>
+        DANH SÁCH CẢNH BÁO
+        </h2>
+
+        ${document.getElementById("warningTable").outerHTML}
+
+        <h2>
+        LỊCH SỬ BÁO CÁO
+        </h2>
+
+        ${document.getElementById("historyTable").outerHTML}
+
+        <h2>
+        BIỂU ĐỒ MỨC ĐỘ Ô NHIỄM
+        </h2>
+
+        <img src="${barImage}">
+
+        <h2>
+        BIỂU ĐỒ PHÂN BỐ CẢNH BÁO
+        </h2>
+
+        <img src="${pieImage}">
+
+        <h2>
+        BIỂU ĐỒ COD - NH4 - BOD5
+        </h2>
+
+        <img src="${lineImage}">
+
+        <h2>
+        NHẬN XÉT
+        </h2>
+        ${document.getElementById("reportComment").outerHTML}
+        <p>
+        Tổng số điểm quan trắc:
+        ${document.getElementById("tbTotal").innerText}.
+        </p>
+
+        <p>
+        Tổng số điểm ô nhiễm:
+        ${document.getElementById("tbPolluted").innerText}.
+        </p>
+
+        <p>
+        Tỷ lệ ô nhiễm:
+        ${document.getElementById("pollutionRate").innerText}.
+        </p>
+
+        <p>
+        Cần tăng cường giám sát các khu vực có nồng độ COD, NH4 và BOD5 vượt ngưỡng cho phép nhằm hạn chế nguy cơ ô nhiễm nguồn nước.
+        </p>
+
+        </body>
+
+        </html>
+        `;
+
+        let blob = new Blob(
+            [report],
+            {
+                type:"text/html;charset=utf-8"
+            }
+        );
+
+        let a = document.createElement("a");
+
+
+        a.href =
+        URL.createObjectURL(blob);
+
+        a.download =
+        "BaoCaoThongKe.html";
+
+        a.click();
+    }
+
+    function exportExcel(){
+
+        let table = `
+        <html>
+
+        <head>
+
+        <meta charset="UTF-8">
+
+        <style>
+
+        body{
+            font-family:"Times New Roman";
+            font-size:13pt;
+        }
+
+        h1,h2{
+            text-align:center;
+        }
+
+        table{
+            border-collapse:collapse;
+            width:100%;
+            margin-top:10px;
+        }
+
+        th,td{
+            border:1px solid black;
+            padding:8px;
+            text-align:center;
+        }
+
+        th{
+            background:#d9d9d9;
+        }
+
+        </style>
+
+        </head>
+
+        <body>
+
+        <h1>
+        BÁO CÁO THỐNG KÊ CHẤT LƯỢNG NƯỚC
+        </h1>
+
+        <p>
+        Thời gian lập báo cáo:
+        ${new Date().toLocaleString()}
+        </p>
+
+        <h2>
+        THỐNG KÊ TỔNG HỢP
+        </h2>
+
+        ${document.getElementById("summaryTable").outerHTML}
+
+        <br><br>
+
+        <h2>
+        DANH SÁCH CẢNH BÁO
+        </h2>
+
+        ${document.getElementById("warningTable").outerHTML}
+
+        <br><br>
+
+        <h2>
+        LỊCH SỬ BÁO CÁO
+        </h2>
+
+        ${document.getElementById("historyTable").outerHTML}
+
+        <br><br>
+
+        <h2>
+        NHẬN XÉT
+        </h2>
+        ${document.getElementById("reportComment").outerHTML}
+        <table>
+
+        <tr>
+        <td>Tổng điểm quan trắc</td>
+        <td>${document.getElementById("tbTotal").innerText}</td>
+        </tr>
+
+        <tr>
+        <td>Điểm ô nhiễm</td>
+        <td>${document.getElementById("tbPolluted").innerText}</td>
+        </tr>
+
+        <tr>
+        <td>Tỷ lệ ô nhiễm</td>
+        <td>${document.getElementById("pollutionRate").innerText}</td>
+        </tr>
+
+        </table>
+
+        </body>
+
+        </html>
+        `;
+
+        let blob = new Blob(
+            ['\ufeff', table],
+            {
+                type:'application/vnd.ms-excel'
+            }
+        );
+
+        let a =
+        document.createElement("a");
+
+        a.href =
+        URL.createObjectURL(blob);
+
+        a.download =
+        "BaoCaoThongKe.xls";
+
+        a.click();
+    }
+
+    async function loadHistory(){
+
+        const res =
+        await fetch(
+        "/api/reports/latest/"
+        );
+
+        const data =
+        await res.json();
+
+        if(!Array.isArray(data)){
+            return;
+        }
+
+        const body =
+        document.getElementById(
+        "historyBody"
+        );
+
+        body.innerHTML = "";
+
+        data.forEach(r=>{
+
+            body.innerHTML += `
+            <tr>
+
+                <td>${r.id}</td>
+
+                <td>${r.segment_name}</td>
+
+                <td>${r.report_date}</td>
+
+                <td>${r.polluted_count}</td>
+
+            </tr>
+            `;
+        });
+    }
+
+    async function loadRivers(){
+
+        const res =
+        await fetch("/api/rivers/");
+
+        const rivers =
+        await res.json();
+
+        if(!Array.isArray(rivers)){
+            return;
+        }
+
+        const select =
+        document.getElementById(
+        "riverFilter"
+        );
+
+        select.innerHTML =
+        '<option value="">Tất cả đoạn sông</option>';
+
+        rivers.forEach(r=>{
+
+            select.innerHTML += `
+            <option value="${r}">
+            ${r}
+            </option>
+            `;
+        });
+    }
+
+    function resetReport(){
+
+        document.getElementById("totalPoints").innerText = 0;
+        document.getElementById("pollutedPoints").innerText = 0;
+        document.getElementById("totalWarnings").innerText = 0;
+        document.getElementById("pollutionRate").innerText = "0%";
+        document.getElementById("normalArea").innerText = 0;
+
+        document.getElementById("tbTotal").innerText = 0;
+        document.getElementById("tbPolluted").innerText = 0;
+        document.getElementById("tbHigh").innerText = 0;
+        document.getElementById("tbVeryHigh").innerText = 0;
+        document.getElementById("tbNormal").innerText = 0;
+
+        document.getElementById("warningBody").innerHTML = "";
+    }
+
+    resetReport();
+
+    document.getElementById(
+    "reportTime"
+    ).innerText =
+    "Thời gian lập báo cáo: " +
+    new Date().toLocaleString();
+
+    loadRivers();
+</script>
+
+</body>
+</html>

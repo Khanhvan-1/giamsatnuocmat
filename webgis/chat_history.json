@@ -18,5 +18,94 @@
   {
     "user": "gửi link",
     "bot": "<a href=\"http://127.0.0.1:8000/?center=10.977309,106.6365068\" target=\"_blank\">📍 Xem trên bản đồ</a>"
+  },
+  {
+    "title": "Chat mới",
+    "messages": [
+      {
+        "user": "có bao nhiêu điểm quan trắc",
+        "bot": "Hiện có 37 điểm quan trắc."
+      },
+      {
+        "user": "điểm nào có chỉ số do cao nhất",
+        "bot": "Tôi chưa hiểu câu hỏi này."
+      },
+      {
+        "user": "điểm nào có do cao nhất",
+        "bot": "Tôi chưa hiểu câu hỏi này."
+      },
+      {
+        "user": "có bao nhiêu điểm quan trắc",
+        "bot": "Hiện có 37 điểm quan trắc."
+      },
+      {
+        "user": "điểm nào có bod5 cao nhất",
+        "bot": "Điểm SG15 có BOD5 cao nhất: 17.94"
+      },
+      {
+        "user": "cho tôi xin vị trí",
+        "bot": "Điểm SG15 có tọa độ:\n\nLat: 11.0383158\nLng: 106.5829609\n"
+      },
+      {
+        "user": "gửi link",
+        "bot": "<a href=\"http://127.0.0.1:8000/?center=11.0383158,106.5829609\" target=\"_blank\">📍 Xem trên bản đồ</a>"
+      },
+      {
+        "user": "có bao nhiêu điểm quan trắ",
+        "bot": "Hiện có 37 điểm quan trắc."
+      },
+      {
+        "user": "điểm nào có ph cao nhất",
+        "bot": "Điểm SG09 có pH cao nhất: 7.15"
+      },
+      {
+        "user": "cho tôi xin vị trí",
+        "bot": "Điểm SG09 có tọa độ:\n\nLat: 11.1015887\nLng: 106.5168045\n"
+      },
+      {
+        "user": "gửi link",
+        "bot": "<a href=\"/?center=11.1015887,106.5168045\" target=\"_blank\">📍 Xem trên bản đồ</a>"
+      },
+      {
+        "user": "điểm nào có bod5 cao nhất",
+        "bot": "Điểm SG15 có BOD5 cao nhất: 17.86"
+      },
+      {
+        "user": "cho tôi xin vị trí",
+        "bot": "Điểm SG15 có tọa độ:\n\nLat: 11.0383158\nLng: 106.5829609\n"
+      },
+      {
+        "user": "gửi link",
+        "bot": "<a href=\"/?center=11.0383158,106.5829609\" target=\"_blank\">📍 Xem trên bản đồ</a>"
+      },
+      {
+        "user": "điểm nào có colofrom cao nhất",
+        "bot": "Tôi chưa hiểu câu hỏi này."
+      },
+      {
+        "user": "điểm nào có caliform cao nhất",
+        "bot": "Điểm SG18 có Caliform cao nhất: 7356"
+      },
+      {
+        "user": "cho xin vị trí",
+        "bot": "Điểm SG18 có tọa độ:\n\nLat: 11.0058712\nLng: 106.6212706\n"
+      },
+      {
+        "user": "gửi link",
+        "bot": "<a href=\"/map/?center=11.0058712,106.6212706\" target=\"_blank\">📍 Xem trên bản đồ</a>"
+      },
+      {
+        "user": "điểm nào có nh4 thấp nhất",
+        "bot": "Điểm SG09 có NH4 thấp nhất: 0.05"
+      },
+      {
+        "user": "cho xin vị trí",
+        "bot": "Điểm SG09 có tọa độ:\n\nLat: 11.1015887\nLng: 106.5168045\n"
+      },
+      {
+        "user": "gửi link",
+        "bot": "<a href=\"/map/?point=SG09\" target=\"_blank\">📍 Xem trên bản đồ</a>"
+      }
+    ]
   }
 ]

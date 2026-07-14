@@ -25,23 +25,34 @@ def load_chat_history():
 
 
 def save_chat(user_msg, bot_reply):
+
     history = load_chat_history()
 
-    # nếu chưa có session nào → tạo mới
     if not history:
         history.append({
-            "title": user_msg,
+            "title": user_msg[:40],
             "messages": []
         })
 
-    # thêm vào session cuối cùng
+    # nếu là Chat mới và chưa có tin nhắn
+    if (
+        history[-1]["title"] == "Chat mới"
+        and len(history[-1]["messages"]) == 0
+    ):
+        history[-1]["title"] = user_msg[:40]
+
     history[-1]["messages"].append({
         "user": user_msg,
         "bot": bot_reply
     })
 
     with open(CHAT_HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
+        json.dump(
+            history,
+            f,
+            ensure_ascii=False,
+            indent=2
+        )
 
 
 def get_chat_history(request):
@@ -108,10 +119,11 @@ def get_points(request):
     """)
 
     rows = cur.fetchall()
-    data = []
+
+    points = []
 
     for r in rows:
-        data.append({
+        points.append({
             "ma_diem": r[0],
             "ph": r[1],
             "do": r[2],
@@ -120,6 +132,190 @@ def get_points(request):
             "nh4": r[5],
             "caliform": r[6],
             "geometry": json.loads(r[7])
+        })
+
+    cur.close()
+    conn.close()
+
+    return JsonResponse(points, safe=False)
+def get_report_data(request):
+
+    from_date = request.GET.get("from_date")
+    to_date = request.GET.get("to_date")
+    river = request.GET.get("river")
+    level = request.GET.get("level")
+
+    conn = psycopg2.connect(
+        dbname="webgis_nuoc",
+        user="postgres",
+        password="123456",
+        host="localhost",
+        port="5432"
+    )
+
+    cur = conn.cursor()
+
+    query = """
+        SELECT
+            segment_name,
+            ph,
+            do_val,
+            bod5,
+            cod,
+            nh4,
+            coliform,
+            polluted_count,
+            report_date
+        FROM warnings
+        WHERE 1=1
+    """
+
+    params = []
+
+    if from_date:
+        query += " AND report_date >= %s"
+        params.append(from_date + " 00:00:00")
+
+    if to_date:
+        query += " AND report_date <= %s"
+        params.append(to_date + " 23:59:59")
+
+    if river:
+        query += " AND segment_name = %s"
+        params.append(river)
+
+    if level == "normal":
+        query += " AND polluted_count = 0"
+
+    elif level == "medium":
+        query += " AND polluted_count BETWEEN 1 AND 3"
+
+    elif level == "high":
+        query += " AND polluted_count = 4"
+
+    elif level == "veryhigh":
+        query += " AND polluted_count >= 5"
+
+    query += """
+    ORDER BY report_date DESC
+    LIMIT 1300
+    """
+
+    cur.execute(query, params)
+
+    rows = cur.fetchall()
+
+    total = len(rows)
+
+    polluted = len([
+        r for r in rows
+        if r[7] > 0
+    ])
+
+    normal = len([
+        r for r in rows
+        if r[7] == 0
+    ])
+
+    high_warning = len([
+        r for r in rows
+        if r[7] == 4
+    ])
+
+    very_high_warning = len([
+        r for r in rows
+        if r[7] >= 5
+    ])
+
+    data = []
+
+    for r in rows:
+
+        data.append({
+            "segment": r[0],
+            "ph": float(r[1]),
+            "do": float(r[2]),
+            "bod5": float(r[3]),
+            "cod": float(r[4]),
+            "nh4": float(r[5]),
+            "coliform": float(r[6]),
+            "polluted_count": int(r[7]),
+            "report_date": str(r[8])
+        })
+
+    cur.close()
+    conn.close()
+
+    return JsonResponse({
+        "total": total,
+        "polluted": polluted,
+        "normal": normal,
+        "high_warning": high_warning,
+        "very_high_warning": very_high_warning,
+        "rate": round(
+            polluted * 100 / total, 2
+        ) if total else 0,
+        "rows": data[:1300]
+    })
+
+def get_rivers(request):
+
+    conn = psycopg2.connect(
+        dbname="webgis_nuoc",
+        user="postgres",
+        password="123456",
+        host="localhost",
+        port="5432"
+    )
+
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT DISTINCT segment_name
+        FROM warnings
+        ORDER BY segment_name
+    """)
+
+    rivers = [r[0] for r in cur.fetchall()]
+
+    cur.close()
+    conn.close()
+
+    return JsonResponse(rivers, safe=False)
+
+def get_latest_reports(request):
+
+    conn = psycopg2.connect(
+        dbname="webgis_nuoc",
+        user="postgres",
+        password="123456",
+        host="localhost",
+        port="5432"
+    )
+
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            id,
+            segment_name,
+            report_date,
+            polluted_count
+        FROM warnings
+        ORDER BY report_date DESC
+        LIMIT 100
+    """)
+
+    rows = cur.fetchall()
+
+    data = []
+
+    for r in rows:
+        data.append({
+            "id": r[0],
+            "segment_name": r[1],
+            "report_date": str(r[2]),
+            "polluted_count": r[3]
         })
 
     cur.close()
@@ -146,6 +342,9 @@ def login_view(request):
 
 def register_view(request):
     return render(request, "register.html")
+
+def report_view(request):
+    return render(request, "report.html")
 
 # =========================
 # CHATBOT
@@ -251,6 +450,194 @@ def chatbot(request):
                     f"Điểm {point['ma_diem']} có pH thấp nhất: {point['ph']}"
                 )
 
+            # DO cao nhất
+            if "do cao nhất" in message:
+                point = max(data, key=lambda x: x.get("do", 0))
+                last_point = point
+                return reply_and_save(
+                    f"Điểm {point['ma_diem']} có DO cao nhất: {point['do']}"
+                )
+
+            # COD thấp nhất
+            if "cod thấp nhất" in message:
+                point = min(data, key=lambda x: x.get("cod", 999))
+                last_point = point
+                return reply_and_save(
+                    f"Điểm {point['ma_diem']} có COD thấp nhất: {point['cod']}"
+                )
+
+            # BOD5 thấp nhất
+            if "bod5 thấp nhất" in message:
+                point = min(data, key=lambda x: x.get("bod5", 999))
+                last_point = point
+                return reply_and_save(
+                    f"Điểm {point['ma_diem']} có BOD5 thấp nhất: {point['bod5']}"
+                )
+
+            # NH4 thấp nhất
+            if "nh4 thấp nhất" in message:
+                point = min(data, key=lambda x: x.get("nh4", 999))
+                last_point = point
+                return reply_and_save(
+                    f"Điểm {point['ma_diem']} có NH4 thấp nhất: {point['nh4']}"
+                )
+
+            # Coliform cao nhất
+            if "coliform cao nhất" in message:
+                point = max(data, key=lambda x: x.get("coliform", 0))
+                last_point = point
+                return reply_and_save(
+                    f"Điểm {point['ma_diem']} có Coliform cao nhất: {point['coliform']}"
+                )
+
+            # Coliform thấp nhất
+            if "coliform thấp nhất" in message:
+                point = min(data, key=lambda x: x.get("coliform", 999999))
+                last_point = point
+                return reply_and_save(
+                    f"Điểm {point['ma_diem']} có Coliform thấp nhất: {point['coliform']}"
+                )
+            
+            # Trung bình pH
+            if "ph trung bình" in message:
+                avg = sum(x["ph"] for x in data) / len(data)
+                return reply_and_save(
+                    f"pH trung bình là {avg:.2f}"
+                )
+
+            # Trung bình DO
+            if "do trung bình" in message:
+                avg = sum(x["do"] for x in data) / len(data)
+                return reply_and_save(
+                    f"DO trung bình là {avg:.2f}"
+                )
+
+            # Trung bình COD
+            if "cod trung bình" in message:
+                avg = sum(x["cod"] for x in data) / len(data)
+                return reply_and_save(
+                    f"COD trung bình là {avg:.2f}"
+                )
+
+            # Trung bình BOD5
+            if "bod5 trung bình" in message:
+                avg = sum(x["bod5"] for x in data) / len(data)
+                return reply_and_save(
+                    f"BOD5 trung bình là {avg:.2f}"
+                )
+
+            # Trung bình NH4
+            if "nh4 trung bình" in message:
+                avg = sum(x["nh4"] for x in data) / len(data)
+                return reply_and_save(
+                    f"NH4 trung bình là {avg:.2f}"
+                )
+
+            # DO dưới chuẩn
+            if "do dưới chuẩn" in message:
+                count = len([
+                    x for x in data
+                    if x["do"] < 4
+                ])
+
+                return reply_and_save(
+                    f"Có {count} điểm DO dưới chuẩn."
+                )
+
+            # COD vượt chuẩn
+            if "cod vượt chuẩn" in message:
+                count = len([
+                    x for x in data
+                    if x["cod"] > 30
+                ])
+
+                return reply_and_save(
+                    f"Có {count} điểm COD vượt chuẩn."
+                )
+
+            # BOD5 vượt chuẩn
+            if "bod5 vượt chuẩn" in message:
+                count = len([
+                    x for x in data
+                    if x["bod5"] > 12
+                ])
+
+                return reply_and_save(
+                    f"Có {count} điểm BOD5 vượt chuẩn."
+                )
+
+            # NH4 vượt chuẩn
+            if "nh4 vượt chuẩn" in message:
+                count = len([
+                    x for x in data
+                    if x["nh4"] > 0.5
+                ])
+
+                return reply_and_save(
+                    f"Có {count} điểm NH4 vượt chuẩn."
+                )
+
+            if "top 5 cod" in message:
+
+                top = sorted(
+                    data,
+                    key=lambda x: x["cod"],
+                    reverse=True
+                )[:5]
+
+                result = "Top 5 COD cao nhất:\n"
+
+                for p in top:
+                    result += (
+                        f"{p['ma_diem']} : "
+                        f"{p['cod']}\n"
+                    )
+
+                return reply_and_save(result)
+            
+            if "nước có tốt không" in message:
+
+                bad = len([
+                    x for x in data
+                    if x["cod"] > 30
+                    or x["bod5"] > 12
+                    or x["nh4"] > 0.5
+                ])
+
+                if bad > len(data)/2:
+                    return reply_and_save(
+                        "Chất lượng nước đang ở mức kém."
+                    )
+
+                return reply_and_save(
+                    "Chất lượng nước đang ở mức tương đối tốt."
+                )
+
+            if "thông tin điểm" in message:
+
+                parts = message.split()
+
+                ma = parts[-1].upper()
+
+                for p in data:
+
+                    if p["ma_diem"] == ma:
+
+                        last_point = p
+
+                        return reply_and_save(
+                            f"""
+                            Điểm {ma}
+
+                            pH: {p['ph']}
+                            DO: {p['do']}
+                            BOD5: {p['bod5']}
+                            COD: {p['cod']}
+                            NH4: {p['nh4']}
+                            Coliform: {p['coliform']}
+                            """
+                        )
+        
             # =====================
             # 9. điểm ô nhiễm nhất
             # =====================
@@ -317,7 +704,7 @@ Lng: {lng}
                     lng = last_point["geometry"]["coordinates"][0]
                     lat = last_point["geometry"]["coordinates"][1]
 
-                    map_link = f"http://127.0.0.1:8000/?center={lat},{lng}"
+                    map_link = f"/map/?point={last_point['ma_diem']}" 
 
                     return reply_and_save(
                         f'<a href="{map_link}" target="_blank">📍 Xem trên bản đồ</a>'

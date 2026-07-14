@@ -2,9 +2,8 @@
 
 {% block content %}
     <script>
-    if(localStorage.getItem("isLogin") !== "true"){
-        window.location.href = "/login/";
-    }
+        console.log("Current URL:", window.location.href);
+        console.log("isLogin =", localStorage.getItem("isLogin"));
     </script>
 <div id="map"></div>
 
@@ -269,12 +268,42 @@
             attribution: '&copy; Google'
         });
 
+        let centerLat = 10.75;
+        let centerLng = 106.65;
+        let zoomLevel = 11;
+
+        const params = new URLSearchParams(
+            window.location.search
+        );
+
+        const center = params.get("center");
+
+        if(center){
+
+            const coords = center.split(",");
+
+            centerLat = parseFloat(coords[0]);
+            centerLng = parseFloat(coords[1]);
+
+            zoomLevel = 16;
+        }
+
         var map = L.map('map', {
-            center: [10.75, 106.65],
-            zoom: 11,
+            center: [centerLat, centerLng],
+            zoom: zoomLevel,
             layers: [streetMap]
         });
 
+        if(center){
+
+            L.marker([
+                centerLat,
+                centerLng
+            ])
+            .addTo(map)
+            .bindPopup("Điểm quan trắc")
+            .openPopup();
+        }
         map.on("click", async function(e) {
             const lat = e.latlng.lat;
             const lng = e.latlng.lng;
@@ -410,7 +439,21 @@
             }).addTo(map);
 
             // Hiển thị popup thông tin (có thể lấy từ tham số khác nếu muốn)
-            highlightedSegment.bindPopup('⚠ Đoạn sông đang được cảnh báo ô nhiễm').openPopup();
+        const priority =
+            urlParams.get('priority') || 'Không xác định';
+
+        const issues =
+            urlParams.get('issues') || 'Không có dữ liệu';
+
+        highlightedSegment.bindPopup(`
+            <div style="min-width:220px">
+                <h4>⚠ Cảnh báo ô nhiễm</h4>
+                <b>Mức độ:</b> ${priority}<br>
+
+                <b>Thông số vượt ngưỡng:</b><br>
+                ${issues}
+            </div>
+        `).openPopup();
 
             // Nếu không có bounds, thì zoom vào đoạn
             const boundsParam = urlParams.get('bounds');
@@ -419,6 +462,44 @@
             }
         }
 
+        function showWarningInfoFromUrl(){
+
+            const params =
+                new URLSearchParams(window.location.search);
+
+            const priority =
+                params.get("priority");
+
+            const issues =
+                params.get("issues");
+
+            if(!priority && !issues) return;
+
+            const popupHtml = `
+                <div style="
+                    min-width:220px;
+                    font-size:14px;
+                ">
+                    <h4 style="margin:0 0 10px 0;">
+                        ⚠ Cảnh báo ô nhiễm
+                    </h4>
+
+                    <b>Mức cảnh báo:</b><br>
+                    ${priority || "Không có"}<br><br>
+
+                    <b>Chỉ số vượt ngưỡng:</b><br>
+                    ${issues || "Không có"}
+                </div>
+            `;
+
+            if(highlightedSegment){
+
+                highlightedSegment.bindPopup(
+                    popupHtml
+                ).openPopup();
+            }
+        }
+        
         // Gọi các hàm sau khi map đã sẵn sàng
         let autoInterpTriggered = false;
         function activateAutoInterpolation() {
@@ -816,7 +897,37 @@
             });
 
             pointsLayer = markersCluster.addTo(map);
+            const params = new URLSearchParams(window.location.search);
 
+            const pointCode = params.get("point");
+
+            if (pointCode) {
+
+                const point = currentPointData.find(
+                    p => p.ma_diem === pointCode
+                );
+
+                if (point && point.geometry?.coordinates) {
+
+                    const lat = point.geometry.coordinates[1];
+                    const lng = point.geometry.coordinates[0];
+
+                    map.setView([lat, lng], 17);
+
+                    L.popup()
+                        .setLatLng([lat, lng])
+                        .setContent(`
+                            <b>${point.ma_diem}</b><br><br>
+                            pH: ${point.ph}<br>
+                            DO: ${point.do}<br>
+                            BOD5: ${point.bod5}<br>
+                            COD: ${point.cod}<br>
+                            NH4: ${point.nh4}<br>
+                            Coliform: ${point.coliform}
+                        `)
+                        .openOn(map);
+                }
+            }
             overlayLayers["Điểm quan trắc"] = pointsLayer;
 
             updateLayerControl();
@@ -1492,6 +1603,7 @@
             })
             .catch(err => console.error("Lỗi tải điểm:", err));
 
+        
         // ==================== VẼ RANH GIỚI ====================
         fetch("/static/data/tphcm_boundary_geo.json")
             .then(res => res.json())
@@ -1502,7 +1614,6 @@
             }).catch(err => console.error("Lỗi ranh giới:", err));
 
 
-        // ==================== CHỈ ĐƯỜNG ====================
         window.goToHere = function(destLat, destLng) {
 
             if (!navigator.geolocation) {
@@ -1517,28 +1628,41 @@
                     const userLat = position.coords.latitude;
                     const userLng = position.coords.longitude;
 
-                    const url =
-                        `https://www.google.com/maps/dir/${userLat},${userLng}/${destLat},${destLng}`;
-
-                    window.open(url, "_blank");
-                },
-
-                function(error) {
-                    console.log(error);
-
-                    alert(
-                        "Không lấy được vị trí hiện tại.\n\n" +
-                        "Hãy cho phép quyền Location trên trình duyệt."
+                    window.open(
+                        `https://www.google.com/maps/dir/${userLat},${userLng}/${destLat},${destLng}`,
+                        "_blank"
                     );
                 },
 
+                function(error) {
+
+                    console.log(error);
+
+                    if (error.code === 3) {
+
+                        // fallback nếu timeout
+                        window.open(
+                            `https://www.google.com/maps/search/?api=1&query=${destLat},${destLng}`,
+                            "_blank"
+                        );
+
+                    } else {
+
+                        alert(
+                            "Không lấy được vị trí hiện tại.\n\n" +
+                            error.message
+                        );
+                    }
+                },
+
                 {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
+                    enableHighAccuracy: false,
+                    timeout: 30000,
+                    maximumAge: 300000
                 }
             );
         };
+
         window.generateSingleInterpolation = generateSingleInterpolation;
         window.generateCombinedAverage = generateCombinedAverage;
         window.findRoute = findRoute;
@@ -1862,6 +1986,13 @@
                 alert("Không thể lấy vị trí: " + error.message);
             });
         });
+
+        // Zoom tới vị trí được truyền từ dashboard
+        zoomFromParams();
+
+        // Highlight đoạn sông ô nhiễm
+        drawSegmentFromCoords();
+        showWarningInfoFromUrl();
     });
 </script>
 {% endblock %}
